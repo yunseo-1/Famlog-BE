@@ -79,7 +79,7 @@
 ## 6. 다음 작업: W1 체크리스트
 
 - [ ] 저장소 생성 (`famlog`), 이 패키지 파일 복사, `.mcp.json` 확인
-- [ ] 사양서 로컬 사본 만들기 → `docs/spec/integrated-spec.md` (SETUP 문서 참고)
+- [x] 사양서 로컬 사본 → `docs/spec/` (통합 사양서 v2.0, 장별 Markdown + 색인 `README.md`)
 - [ ] `infra/docker-compose.yml`: postgres(postgis+pgvector), redis, minio
 - [ ] `backend/` Spring Boot 3 + Java 21 골격, Flyway V1 (users, social_accounts, family_groups, group_members, group_invites, chat_rooms)
 - [ ] 공통: 에러 응답 형식(`code/message/traceId`), `GroupAccessChecker`, JWT 필터 골격
@@ -100,4 +100,4 @@
 
 | 날짜 | 기능 ID | 내용 | 커밋 |
 |---|---|---|---|
-| | | | |
+| 2026-11-12 | - | 통합 사양서 v2.0 사본(`docs/spec/`), CLAUDE.md 사양서 v2.0 기준으로 갱신, `/feature` 명령 추가 | docs(spec) |

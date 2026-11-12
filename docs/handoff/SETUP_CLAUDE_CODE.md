@@ -25,7 +25,10 @@ claude mcp add --transport http notion https://mcp.notion.com/mcp
 
 ## 3. 첫 작업 (Claude Code에 그대로 붙여 넣기)
 
-### 3-1. 사양서 로컬 사본 만들기
+### 3-1. 사양서 로컬 사본 만들기 — ✅ 완료 (2026-11-12)
+
+`docs/spec/`에 통합 사양서 v2.0 사본이 들어 있다 (색인: `docs/spec/README.md`). 아래 프롬프트는 쓰지 않는다.
+사양이 바뀌면 문서 레포(`yunseo-1/Famlog`)의 `docs/spec/`을 고치고 `scripts/sync-spec.sh`로 동기화한다.
 
 ```
 Notion MCP로 페이지 416fc8bd-3e5e-8128-aab8-dc6d43bbd7f2(통합 사양서 v1.0)를 읽어서
@@ -45,7 +48,7 @@ CLAUDE.md와 docs/handoff/HANDOFF.md 6장(W1 체크리스트)을 읽고, 체크�
 
 ```
 [기능] SCH-02 전체·구성원별 일정 조회 — 앱 화면 SCR-20
-[참고] docs/spec/integrated-spec.md 4.3, 14.1(SCH-02) / docs/design/figma-map.md 의 "03 캘린더" / screenshots/03_calendar.png
+[참고] docs/spec/04-functional-requirements.md §4.3, docs/spec/18-acceptance-criteria.md (SCH-02) / docs/design/figma-map.md 의 "03 캘린더" / screenshots/03_calendar.png
 [규칙] 색·간격·글꼴은 core/designsystem 의 FamColors/FamType/FamDimens 만 사용.
        Figma 컴포넌트 이름(Member Chip, App Bar, Bottom Nav …)과 같은 이름의 Composable 로 만든다.
 [Figma] 로컬 문서로 부족한 부분만 노드 7:156 에 get_design_context 한 번 호출 가능.
