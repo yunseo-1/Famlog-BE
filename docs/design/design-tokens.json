@@ -1,0 +1,41 @@
+{
+  "$description": "FamLog 디자인 토큰 (Figma 변수 기준, 2026-11-12). Light 모드만 정의됨.",
+  "font": { "family": "Noto Sans KR", "weights": { "regular": 400, "medium": 500, "bold": 700 } },
+  "primitive": {
+    "coral":   { "50": "#FFF1EB", "100": "#FFDCCB", "500": "#E8643C", "600": "#C94A26" },
+    "gray":    { "0": "#FFFFFF", "50": "#F7F7F8", "100": "#EFEFF1", "200": "#E1E1E5", "300": "#C8C8CE", "500": "#8A8A93", "700": "#4A4A52", "900": "#1C1C21" },
+    "blue":    { "50": "#EAF1FF", "600": "#2F6FED" },
+    "green":   { "50": "#E6F6EF", "600": "#1F9D6B" },
+    "purple":  { "50": "#F1ECFF", "600": "#7A4FE0" },
+    "magenta": { "50": "#FCEBF3", "600": "#C2255C" },
+    "red":     { "600": "#D93A3A" }
+  },
+  "color": {
+    "bg":       { "default": "{gray.0}", "subtle": "{gray.50}" },
+    "surface":  { "muted": "{gray.100}", "placeholder": "{gray.200}" },
+    "border":   { "default": "{gray.200}", "strong": "{gray.300}" },
+    "text":     { "primary": "{gray.900}", "secondary": "{gray.700}", "tertiary": "{gray.500}", "onBrand": "{gray.0}" },
+    "brand":    { "primary": "{coral.600}", "accent": "{coral.500}", "subtle": "{coral.50}" },
+    "bubble":   { "mine": "{coral.100}", "other": "{gray.100}" },
+    "category": {
+      "schedule": "{blue.600}", "scheduleBg": "{blue.50}",
+      "anniversary": "{magenta.600}", "anniversaryBg": "{magenta.50}",
+      "place": "{green.600}", "placeBg": "{green.50}",
+      "todo": "{purple.600}", "todoBg": "{purple.50}"
+    },
+    "status":   { "danger": "{red.600}" }
+  },
+  "memberColorSamples": ["#14A3B8", "#E5568D", "#E8A33C", "#7BB33A"],
+  "spacing": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 20, "2xl": 24, "3xl": 32 },
+  "radius":  { "sm": 8, "md": 12, "lg": 16, "full": 999 },
+  "typography": {
+    "titleLarge":       { "size": 22, "weight": "bold",   "lineHeight": 30 },
+    "titleMedium":      { "size": 18, "weight": "bold",   "lineHeight": 26 },
+    "bodyLarge":        { "size": 16, "weight": "regular","lineHeight": 24 },
+    "bodyMedium":       { "size": 14, "weight": "regular","lineHeight": 20 },
+    "bodyMediumStrong": { "size": 14, "weight": "medium", "lineHeight": 20 },
+    "label":            { "size": 13, "weight": "medium", "lineHeight": 18 },
+    "caption":          { "size": 12, "weight": "regular","lineHeight": 16 }
+  },
+  "layout": { "screenWidth": 360, "screenPadding": 16, "appBarHeight": 56, "bottomNavHeight": 64, "minTouchTarget": 48, "fabSize": 56 }
+}
