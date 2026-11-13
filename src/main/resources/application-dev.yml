@@ -4,6 +4,8 @@
 #   FAMLOG_AUTH_JWT_ACTIVE_KID=k2026a
 #   FAMLOG_AUTH_JWT_KEYS_0_KID=k2026a  FAMLOG_AUTH_JWT_KEYS_0_PRIVATE_KEY=...  FAMLOG_AUTH_JWT_KEYS_0_PUBLIC_KEY=...
 # 키 교체 중에는 이전 키를 KEYS_1_KID / KEYS_1_PUBLIC_KEY 로 남긴다 (검증 전용, 개인 키 불필요).
+#
+# 소셜 로그인: FAMLOG_SOCIAL_KAKAO_APP_ID=123456  FAMLOG_SOCIAL_GOOGLE_CLIENT_IDS=xxx.apps.googleusercontent.com
 spring:
   datasource:
     url: ${DB_URL}

@@ -104,6 +104,40 @@ public class SessionTokenService {
         revoke(sessionRepository.findByUserIdAndRevokedAtIsNull(userId));
     }
 
+    /** 같은 기기로 다시 로그인하면 그 기기의 이전 세션을 정리한다 (기기 목록 중복 방지). */
+    @Transactional
+    public void revokeDeviceSessions(long userId, String deviceId) {
+        revoke(sessionRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(userId, deviceId));
+    }
+
+    /** 로그아웃: Refresh 토큰으로 세션을 찾는다 (Access가 만료돼도 로그아웃할 수 있게). 모르는 토큰이면 아무것도 하지 않는다. */
+    @Transactional
+    public void revokeByRefreshToken(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenRepository.findByTokenHash(RefreshTokens.hash(rawRefreshToken))
+                .ifPresent(token -> revokeSession(token.getSessionId()));
+    }
+
+    /** 로그인 기기 목록 (AUTH-03) */
+    @Transactional(readOnly = true)
+    public List<UserSession> listActiveSessions(long userId) {
+        return sessionRepository.findByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByLastUsedAtDesc(userId,
+                Instant.now(clock));
+    }
+
+    /** 원격 로그아웃 (AUTH-03). 내 세션이 아니면 존재 여부를 숨기고 404 (사양서 9.3). */
+    @Transactional
+    public void revokeOwnSession(long userId, long sessionId) {
+        UserSession session = sessionRepository.findById(sessionId)
+                .filter(found -> found.getUserId() == userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (session.getRevokedAt() == null) {
+            revoke(List.of(session));
+        }
+    }
+
     private void revoke(List<UserSession> sessions) {
         if (sessions.isEmpty()) {
             return;

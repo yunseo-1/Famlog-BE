@@ -14,7 +14,13 @@ spring:
       password: ${REDIS_PASSWORD}
 
 # JWT 서명 키: infra/scripts/gen-jwt-key.sh 가 infra/.env 에 만들어 둔다
+# 소셜 로그인 값이 비어 있으면 해당 제공자 로그인만 실패한다 (서버는 뜬다)
 famlog:
+  social:
+    kakao:
+      app-id: ${KAKAO_APP_ID:}
+    google:
+      client-ids: ${GOOGLE_CLIENT_ID:}
   auth:
     jwt:
       active-kid: ${JWT_ACTIVE_KID}
