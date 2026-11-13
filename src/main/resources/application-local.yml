@@ -7,6 +7,21 @@ spring:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+  data:
+    redis:
+      host: localhost
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+
+# JWT 서명 키: infra/scripts/gen-jwt-key.sh 가 infra/.env 에 만들어 둔다
+famlog:
+  auth:
+    jwt:
+      active-kid: ${JWT_ACTIVE_KID}
+      keys:
+        - kid: ${JWT_ACTIVE_KID}
+          private-key: ${JWT_PRIVATE_KEY}
+          public-key: ${JWT_PUBLIC_KEY}
 
 logging:
   level:

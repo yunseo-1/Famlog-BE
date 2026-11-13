@@ -29,7 +29,10 @@ public class TraceIdFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String traceId = UUID.randomUUID().toString().replace("-", "");
+        // 같은 요청 안에서 다시 디스패치(에러 페이지 등)되면 처음 만든 값을 이어 쓴다. 요청 속성은 클라이언트가 바꿀 수 없다
+        String traceId = request.getAttribute(REQUEST_ATTRIBUTE) instanceof String existing
+                ? existing
+                : UUID.randomUUID().toString().replace("-", "");
         request.setAttribute(REQUEST_ATTRIBUTE, traceId);
         response.setHeader(HEADER, traceId);
         MDC.put(MDC_KEY, traceId);

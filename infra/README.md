@@ -21,6 +21,8 @@
 cp infra/.env.example infra/.env     # 값을 바꾼다 (아래 한 줄로 무작위 값 생성 가능)
 sed -i '' "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/; s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 16)/; s/^S3_ACCESS_KEY=.*/S3_ACCESS_KEY=famlog$(openssl rand -hex 6)/; s/^S3_SECRET_KEY=.*/S3_SECRET_KEY=$(openssl rand -hex 20)/" infra/.env
 
+sh infra/scripts/gen-jwt-key.sh      # 로컬 JWT 서명 키(ES256)를 infra/.env 에 추가 (이미 있으면 그대로 둠)
+
 docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --wait
 ```
 
@@ -73,6 +75,7 @@ docker run --rm --network host -e AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" -e AWS_SECR
 | JDBC URL | `jdbc:postgresql://localhost:5432/${POSTGRES_DB}` |
 | Redis | `localhost:6379`, 비밀번호 `${REDIS_PASSWORD}` |
 | S3 endpoint | `http://localhost:8333`, region `us-east-1`(임의), path-style 접근, 버킷 `${S3_BUCKET_MEDIA}` |
+| JWT 서명 키 | `JWT_ACTIVE_KID`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY` (`gen-jwt-key.sh`가 생성. 다시 만들면 기존 토큰이 모두 무효) |
 
 ## 알아둘 점
 

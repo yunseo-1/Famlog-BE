@@ -14,6 +14,10 @@ spring:
           time_zone: UTC          # timestamptz UTC 저장 (사양서 10장)
   flyway:
     locations: classpath:db/migration
+  data:
+    redis:
+      timeout: 2s                 # Redis 장애가 요청을 오래 붙잡지 않게
+      connect-timeout: 2s
 
 server:
   shutdown: graceful
@@ -43,3 +47,26 @@ logging:
   structured:
     json:
       customizer: com.famlog.common.logging.MaskingJsonMembersCustomizer
+
+famlog:
+  # 인증 (사양서 9.2). 서명 키(famlog.auth.jwt.*)는 환경별 설정에서 넣는다
+  auth:
+    issuer: famlog
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d
+  # 요청 제한 (사양서 9.6). 메시지 초당 5개(WebSocket)는 S8, AI 요청 그룹별 상한은 S16에서 추가
+  rate-limit:
+    enabled: true
+    rules:
+      - name: login
+        method: POST
+        path: /api/v1/auth/{provider}/login
+        key: IP
+        capacity: 10
+        period: 1m
+      - name: invite-join
+        method: POST
+        path: /api/v1/groups/join
+        key: USER
+        capacity: 5
+        period: 1m
