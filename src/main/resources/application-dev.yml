@@ -1,0 +1,11 @@
+# 테스트 서버: 모든 비밀은 환경 변수로만 받는다 (사양서 9.4)
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+logging:
+  structured:
+    format:
+      console: ecs

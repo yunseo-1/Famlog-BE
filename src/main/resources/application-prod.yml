@@ -1,0 +1,17 @@
+# 운영: 모든 비밀은 환경 변수로만 받는다 (사양서 9.4). API 문서는 외부에 열지 않는다.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs

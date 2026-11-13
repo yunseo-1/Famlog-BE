@@ -84,6 +84,8 @@ Famlog-BE/
 ```bash
 # 인프라 (처음엔 cp infra/.env.example infra/.env 후 값 변경)
 docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --wait
-# 서버
-./gradlew test && ./gradlew bootRun
+# 서버 (JDK 21, 테스트는 Docker 필요: Testcontainers가 infra/postgres 이미지를 빌드)
+./gradlew test
+./gradlew bootRun          # 기본 프로필 local: infra/.env 를 읽어 로컬 인프라에 접속
+# 확인: http://localhost:8080/actuator/health, http://localhost:8080/v3/api-docs
 ```
