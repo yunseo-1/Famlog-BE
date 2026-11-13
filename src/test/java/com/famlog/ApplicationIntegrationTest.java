@@ -31,24 +31,34 @@ class ApplicationIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void health_외_Actuator_엔드포인트는_노출하지_않는다() throws Exception {
+    void health_외_Actuator_엔드포인트는_로그인해도_노출하지_않는다() throws Exception {
         for (String path : new String[] { "/actuator/env", "/actuator/beans", "/actuator/configprops" }) {
-            mockMvc.perform(get(path))
+            mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mockMvc.perform(get(path).with(asUser(1)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("NOT_FOUND"));
         }
     }
 
     @Test
-    void OpenAPI_문서를_제공한다() throws Exception {
+    void OpenAPI_문서는_토큰_없이_볼_수_있다() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.openapi").exists());
     }
 
     @Test
-    void 없는_API는_공통_에러_형식과_traceId로_응답한다() throws Exception {
+    void 토큰_없이_API를_부르면_401_AUTH_INVALID() throws Exception {
         mockMvc.perform(get("/api/v1/no-such-api"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists(TraceIdFilter.HEADER))
+                .andExpect(jsonPath("$.code").value("AUTH_INVALID"))
+                .andExpect(jsonPath("$.traceId").isNotEmpty());
+    }
+
+    @Test
+    void 없는_API는_공통_에러_형식과_traceId로_응답한다() throws Exception {
+        mockMvc.perform(get("/api/v1/no-such-api").with(asUser(1)))
                 .andExpect(status().isNotFound())
                 .andExpect(header().exists(TraceIdFilter.HEADER))
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"))

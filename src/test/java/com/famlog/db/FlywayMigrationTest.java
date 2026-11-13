@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.support.IntegrationTest;
 
-/** Flyway V1이 실제 PostgreSQL(PostGIS·pgvector 이미지)에 적용되고 사양서 10.2 제약이 걸리는지 확인한다. */
+/** Flyway 마이그레이션(V1 계정, V2 Refresh 토큰)이 실제 PostgreSQL(PostGIS·pgvector 이미지)에 적용되고 사양서 10.2 제약이 걸리는지 확인한다. */
 @Transactional
 class FlywayMigrationTest extends IntegrationTest {
 
@@ -85,13 +85,37 @@ class FlywayMigrationTest extends IntegrationTest {
     }
 
     @Test
-    void refresh_토큰_해시는_중복될_수_없다() {
-        long userId = insertUser("엄마");
-        String insert = "INSERT INTO user_sessions (user_id, device_id, platform, refresh_token_hash, expires_at) "
-                + "VALUES (?, ?, 'ANDROID', 'same-hash', now() + interval '14 days')";
-        jdbcTemplate.update(insert, userId, "device-1");
+    void V2에서_Refresh_토큰_해시는_refresh_tokens로_옮겨졌다() {
+        List<String> sessionColumns = jdbcTemplate.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'user_sessions'",
+                String.class);
 
-        assertThatThrownBy(() -> jdbcTemplate.update(insert, userId, "device-2"))
+        assertThat(sessionColumns).doesNotContain("refresh_token_hash");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE success", String.class)).contains("1", "2");
+    }
+
+    @Test
+    void refresh_토큰_해시는_중복될_수_없다() {
+        long sessionId = insertSession(insertUser("엄마"));
+        String insert = "INSERT INTO refresh_tokens (session_id, token_hash, status, expires_at) "
+                + "VALUES (?, 'same-hash', ?, now() + interval '14 days')";
+        jdbcTemplate.update(insert, sessionId, "ROTATED");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, sessionId, "ACTIVE"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void 세션당_ACTIVE_Refresh_토큰은_하나뿐이다() {
+        long sessionId = insertSession(insertUser("엄마"));
+        String insert = "INSERT INTO refresh_tokens (session_id, token_hash, status, expires_at) "
+                + "VALUES (?, ?, ?, now() + interval '14 days')";
+        jdbcTemplate.update(insert, sessionId, "h1", "ROTATED");
+        jdbcTemplate.update(insert, sessionId, "h2", "ROTATED");
+        jdbcTemplate.update(insert, sessionId, "h3", "ACTIVE");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, sessionId, "h4", "ACTIVE"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -107,5 +131,10 @@ class FlywayMigrationTest extends IntegrationTest {
 
     private long insertUser(String nickname) {
         return jdbcTemplate.queryForObject("INSERT INTO users (nickname) VALUES (?) RETURNING id", Long.class, nickname);
+    }
+
+    private long insertSession(long userId) {
+        return jdbcTemplate.queryForObject("INSERT INTO user_sessions (user_id, device_id, platform, expires_at) "
+                + "VALUES (?, 'device', 'ANDROID', now() + interval '14 days') RETURNING id", Long.class, userId);
     }
 }
