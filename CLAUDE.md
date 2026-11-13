@@ -46,7 +46,7 @@ Google Play 출시가 목표다 (v1.0 목표: 2027년 2월 중순).
 | 앱 | Kotlin, Jetpack Compose, MVVM + Hilt, Retrofit/OkHttp, STOMP, Room, Coil, Kakao Map SDK, Photo Picker, FCM. minSdk 26 / **targetSdk 36** |
 | 서버 | Java 21, Spring Boot 3, Spring Security(JWT), WebSocket(STOMP), JPA + QueryDSL, Flyway |
 | 워커 | Python 3.12, FastAPI, Redis Streams consumer (AI 인식·미디어·영상) |
-| 데이터 | PostgreSQL 16 + PostGIS + pgvector, Redis 7, S3(로컬은 MinIO) |
+| 데이터 | PostgreSQL 16 + PostGIS + pgvector, Redis 7, S3(로컬은 SeaweedFS — MinIO 이미지 배포 중단으로 대체, `infra/README.md`) |
 | 인프라 | Docker Compose (MVP), GitHub Actions |
 
 ## 5. 저장소 구조
@@ -61,7 +61,7 @@ Famlog-BE/
 │                           각 모듈: controller / service / domain / repository / dto
 ├ src/main/resources/db/migration/   Flyway (V1__*.sql …)
 ├ worker/    (예정) Python 워커 app/{consumers,ai,media,video,prompts}, evals/
-├ infra/     (예정) docker-compose.yml, .env.example
+├ infra/     docker-compose.yml, .env.example, postgres/, seaweedfs/ (README.md 참고)
 └ docs/      spec/, design/, handoff/, adr/
 ```
 
@@ -82,8 +82,8 @@ Famlog-BE/
 ## 7. 자주 쓰는 명령 (W1에 실제 값으로 채울 것)
 
 ```bash
-# 인프라
-docker compose -f infra/docker-compose.yml up -d
+# 인프라 (처음엔 cp infra/.env.example infra/.env 후 값 변경)
+docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --wait
 # 서버
 ./gradlew test && ./gradlew bootRun
 ```
