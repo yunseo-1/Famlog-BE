@@ -1,0 +1,13 @@
+# 로컬 개발: infra/.env 를 그대로 읽어 Docker Compose 인프라에 접속한다 (값을 두 곳에 쓰지 않는다).
+# 저장소 루트에서 실행해야 한다 (./gradlew bootRun, IntelliJ 작업 디렉터리 = 저장소 루트).
+spring:
+  config:
+    import: optional:file:./infra/.env[.properties]
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+
+logging:
+  level:
+    com.famlog: DEBUG

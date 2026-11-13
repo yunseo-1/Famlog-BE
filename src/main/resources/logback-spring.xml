@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  로그 마스킹 (사양서 9.8). 메시지 변환기(%m, %msg, %message)를 마스킹 버전으로 바꾼다.
+  dev·prod는 JSON 구조화 로그(MaskingJsonMembersCustomizer가 마스킹), 그 외(local·test)는 텍스트 로그.
+-->
+<configuration>
+    <conversionRule conversionWord="m" class="com.famlog.common.logging.MaskingMessageConverter"/>
+    <conversionRule conversionWord="msg" class="com.famlog.common.logging.MaskingMessageConverter"/>
+    <conversionRule conversionWord="message" class="com.famlog.common.logging.MaskingMessageConverter"/>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProfile name="dev | prod">
+        <include resource="org/springframework/boot/logging/logback/structured-console-appender.xml"/>
+    </springProfile>
+    <springProfile name="!(dev | prod)">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

@@ -1,0 +1,45 @@
+# 공통 설정. 환경별 값은 application-{local,dev,prod}.yml (사양서 13.3 환경 분리)
+spring:
+  application:
+    name: famlog-api
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # 스키마는 Flyway로만 바꾼다
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC          # timestamptz UTC 저장 (사양서 10장)
+  flyway:
+    locations: classpath:db/migration
+
+server:
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    whitelabel:
+      enabled: false
+
+# Actuator: health만 공개, 상세 정보 숨김 (사양서 9.6)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  default-produces-media-type: application/json
+
+logging:
+  structured:
+    json:
+      customizer: com.famlog.common.logging.MaskingJsonMembersCustomizer
