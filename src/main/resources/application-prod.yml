@@ -1,5 +1,5 @@
 # 운영: 모든 비밀은 환경 변수로만 받는다 (사양서 9.4). API 문서는 외부에 열지 않는다.
-# JWT 서명 키 환경 변수 이름은 application-dev.yml 주석 참고.
+# JWT 서명 키·소셜 로그인 환경 변수 이름은 application-dev.yml 주석 참고.
 spring:
   datasource:
     url: ${DB_URL}

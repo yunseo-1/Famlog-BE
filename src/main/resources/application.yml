@@ -54,6 +54,16 @@ famlog:
     issuer: famlog
     access-token-ttl: 30m
     refresh-token-ttl: 14d
+  # 소셜 로그인 (사양서 4.1 AUTH-01). 카카오 앱 ID·Google 클라이언트 ID는 환경별 설정에서 넣는다
+  social:
+    kakao:
+      base-url: https://kapi.kakao.com
+    google:
+      jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
+  # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
+  consent:
+    terms-version: "1.0"
+    privacy-version: "1.0"
   # 요청 제한 (사양서 9.6). 메시지 초당 5개(WebSocket)는 S8, AI 요청 그룹별 상한은 S16에서 추가
   rate-limit:
     enabled: true
@@ -63,6 +73,18 @@ famlog:
         path: /api/v1/auth/{provider}/login
         key: IP
         capacity: 10
+        period: 1m
+      - name: login                # 가입도 로그인과 같은 한도를 나눠 쓴다 (같은 name = 같은 버킷)
+        method: POST
+        path: /api/v1/auth/{provider}/signup
+        key: IP
+        capacity: 10
+        period: 1m
+      - name: refresh
+        method: POST
+        path: /api/v1/auth/refresh
+        key: IP
+        capacity: 30
         period: 1m
       - name: invite-join
         method: POST

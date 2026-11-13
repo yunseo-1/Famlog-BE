@@ -13,13 +13,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.famlog.support.IntegrationTest;
 
 /**
  * 요청 제한 (사양서 9.6, 9.9 SEC-T5 일부). 실제 Redis 컨테이너 + Bucket4j로 확인한다.
- * 로그인·초대 API는 아직 없어서, 한도 안의 요청은 404로 끝난다.
+ * 한도 안의 요청은 본문이 없어 400(로그인·가입·재발급) 또는 API가 아직 없어 404(초대)로 끝난다. 429만 아니면 된다.
  */
 class RateLimitIntegrationTest extends IntegrationTest {
 
@@ -30,7 +31,7 @@ class RateLimitIntegrationTest extends IntegrationTest {
     void 로그인은_IP당_분당_10회_11번째는_429_RATE_LIMITED와_Retry_After() throws Exception {
         String ip = randomIp();
         for (int i = 0; i < 10; i++) {
-            mockMvc.perform(login("kakao", ip)).andExpect(status().isNotFound());
+            mockMvc.perform(login("kakao", ip)).andExpect(notLimited());
         }
 
         MvcResult limited = mockMvc.perform(login("kakao", ip))
@@ -59,7 +60,28 @@ class RateLimitIntegrationTest extends IntegrationTest {
             mockMvc.perform(login("kakao", ip));
         }
 
-        mockMvc.perform(login("kakao", randomIp())).andExpect(status().isNotFound());
+        mockMvc.perform(login("kakao", randomIp())).andExpect(notLimited());
+    }
+
+    @Test
+    void 가입은_로그인과_같은_IP_한도를_나눠_쓴다() throws Exception {
+        String ip = randomIp();
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(login("kakao", ip));
+        }
+
+        mockMvc.perform(withIp(post("/api/v1/auth/{provider}/signup", "kakao"), ip))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void 토큰_재발급은_IP당_분당_30회() throws Exception {
+        String ip = randomIp();
+        for (int i = 0; i < 30; i++) {
+            mockMvc.perform(withIp(post("/api/v1/auth/refresh"), ip)).andExpect(notLimited());
+        }
+
+        mockMvc.perform(withIp(post("/api/v1/auth/refresh"), ip)).andExpect(status().isTooManyRequests());
     }
 
     @Test
@@ -91,10 +113,18 @@ class RateLimitIntegrationTest extends IntegrationTest {
     }
 
     private static MockHttpServletRequestBuilder login(String provider, String ip) {
-        return post("/api/v1/auth/{provider}/login", provider).with(request -> {
+        return withIp(post("/api/v1/auth/{provider}/login", provider), ip);
+    }
+
+    private static MockHttpServletRequestBuilder withIp(MockHttpServletRequestBuilder builder, String ip) {
+        return builder.with(request -> {
             request.setRemoteAddr(ip);
             return request;
         });
+    }
+
+    private static ResultMatcher notLimited() {
+        return result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(429);
     }
 
     private MockHttpServletRequestBuilder join(long userId, String ip) {

@@ -20,6 +20,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Query("select t from RefreshToken t where t.tokenHash = :tokenHash")
     Optional<RefreshToken> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
+    Optional<RefreshToken> findByTokenHash(String tokenHash);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             update RefreshToken t set t.status = com.famlog.auth.domain.RefreshTokenStatus.REVOKED

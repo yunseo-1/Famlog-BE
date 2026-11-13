@@ -18,7 +18,7 @@ public final class LogMasker {
 
     /** key=value, key: value, "key":"value" 형태. 따옴표 값은 끝 따옴표까지, 아니면 구분자(, } ] & 줄바꿈) 전까지. */
     private static final Pattern SENSITIVE_FIELD = Pattern.compile(
-            "(?i)(\"?\\b(?:access_?token|refresh_?token|id_?token|fcm_?token|token|password|secret"
+            "(?i)(\"?\\b(?:access_?token|refresh_?token|id_?token|fcm_?token|provider_?token|token|password|secret"
                     + "|authorization|body|birth_?ym|lat|lng|latitude|longitude)\\b\"?\\s*[:=]\\s*)"
                     + "(\"(?:[^\"\\\\]|\\\\.)*\"|[^,}\\]&\\r\\n]+)");
 

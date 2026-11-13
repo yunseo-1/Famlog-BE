@@ -32,6 +32,7 @@ class LogMaskerTest {
             "accessToken=r4nd0m-refresh-value",
             "fcmToken=r4nd0m-refresh-value",
             "idToken=r4nd0m-refresh-value",
+            "providerToken=r4nd0m-refresh-value",
             "token=r4nd0m-refresh-value",
             "password=r4nd0m-refresh-value",
             "secret: r4nd0m-refresh-value",

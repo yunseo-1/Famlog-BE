@@ -74,5 +74,11 @@ public abstract class IntegrationTest {
         FakeGroupAccessChecker fakeGroupAccessChecker() {
             return new FakeGroupAccessChecker();
         }
+
+        @Bean
+        @Primary
+        FakeSocialLoginVerifier fakeSocialLoginVerifier() {
+            return new FakeSocialLoginVerifier();
+        }
     }
 }
