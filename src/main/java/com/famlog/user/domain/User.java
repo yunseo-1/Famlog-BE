@@ -75,6 +75,18 @@ public class User extends BaseTimeEntity {
         return status == UserStatus.ACTIVE;
     }
 
+    /** 현재 가족 그룹 (사양서 4.1 GRP-03). 구성원인지는 호출하는 쪽에서 확인한다 */
+    public void changeCurrentGroup(Long groupId) {
+        this.lastGroupId = groupId;
+    }
+
+    /** 나가거나 내보내진 그룹이 현재 그룹이면 비운다 → 앱이 다른 그룹이나 그룹 시작 화면으로 */
+    public void clearCurrentGroupIf(long groupId) {
+        if (lastGroupId != null && lastGroupId == groupId) {
+            lastGroupId = null;
+        }
+    }
+
     @Override
     public String toString() {
         return "User[id=" + id + ", status=" + status + "]";

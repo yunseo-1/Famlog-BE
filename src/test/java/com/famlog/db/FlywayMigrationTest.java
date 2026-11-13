@@ -129,6 +129,22 @@ class FlywayMigrationTest extends IntegrationTest {
         assertThat(types).containsExactly("timestamp with time zone");
     }
 
+    @Test
+    void V3_그룹_테이블이_있고_그룹당_활성_OWNER는_한_명이다() {
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", String.class))
+                .contains("family_groups", "group_members", "group_invites", "chat_rooms", "audit_logs");
+        long owner = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, owner);
+        String insert = "INSERT INTO group_members (group_id, user_id, role, calendar_color, joined_at) "
+                + "VALUES (?, ?, 'OWNER', '#14A3B8', now())";
+        jdbcTemplate.update(insert, groupId, owner);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, groupId, insertUser("아빠")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private long insertUser(String nickname) {
         return jdbcTemplate.queryForObject("INSERT INTO users (nickname) VALUES (?) RETURNING id", Long.class, nickname);
     }

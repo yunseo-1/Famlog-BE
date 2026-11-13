@@ -7,10 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.famlog.group.domain.GroupRole;
 import com.famlog.group.service.GroupAccessChecker;
 
-/**
- * 테스트 더블: 그룹 테이블(S5) 전까지 구성원 관계를 메모리에 둔다.
- * 테스트끼리 섞이지 않게 테스트마다 다른 groupId를 쓴다.
- */
+/** 테스트 더블: GroupAccessChecker 기본 메서드(권한 규칙) 단위 테스트용. 통합 테스트는 실제 DB 구현을 쓴다. */
 public class FakeGroupAccessChecker implements GroupAccessChecker {
 
     private final Map<String, GroupRole> memberships = new ConcurrentHashMap<>();

@@ -64,13 +64,6 @@ class GroupAccessCheckerTest {
         assertThat(checker.requireMemberOrNotFound(2, 100)).isEqualTo(GroupRole.MEMBER);
     }
 
-    @Test
-    void S5_전_임시_구현은_모든_접근을_거부한다() {
-        PendingGroupAccessChecker pending = new PendingGroupAccessChecker();
-
-        assertError(() -> pending.requireMember(1, 100), ErrorCode.GROUP_NOT_MEMBER);
-    }
-
     private static void assertError(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(BusinessException.class)
