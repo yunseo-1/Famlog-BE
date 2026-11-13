@@ -2,6 +2,7 @@ package com.famlog.common.error;
 
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -28,6 +29,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RateLimitedException.class)
+    ResponseEntity<ErrorResponse> handleRateLimited(RateLimitedException e, HttpServletRequest request) {
+        return ResponseEntity.status(e.getErrorCode().getStatus())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(e.getRetryAfterSeconds()))
+                .body(ErrorResponse.of(e.getErrorCode(), e.getMessage(), TraceIdFilter.currentTraceId(request)));
+    }
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ErrorResponse> handleBusiness(BusinessException e, HttpServletRequest request) {

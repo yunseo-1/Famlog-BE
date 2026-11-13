@@ -22,6 +22,7 @@ import com.famlog.auth.jwt.FamlogJwtClaims;
 
 /**
  * 통합 테스트 베이스: 전체 컨텍스트(보안 필터 체인 포함) + Testcontainers PostgreSQL·Redis + Flyway 마이그레이션.
+ * 그룹 인가는 실제 DB(DbGroupAccessChecker)를 쓰고, 소셜 제공자만 가짜(FakeSocialLoginVerifier)로 바꾼다.
  * 모든 통합 테스트가 같은 설정을 써서 컨텍스트 하나(컨테이너 한 벌)를 공유한다.
  * Docker가 필요하다 (로컬: OrbStack, CI: GitHub Actions ubuntu 러너).
  */
@@ -37,9 +38,6 @@ public abstract class IntegrationTest {
     @Autowired
     protected JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    protected FakeGroupAccessChecker groupAccessChecker;
-
     @DynamicPropertySource
     static void jwtKeys(DynamicPropertyRegistry registry) {
         registry.add("famlog.auth.jwt.active-kid", () -> TestJwtKeys.ACTIVE_KID);
@@ -51,7 +49,7 @@ public abstract class IntegrationTest {
         registry.add("famlog.auth.jwt.keys[1].public-key", () -> TestJwtKeys.publicKey(TestJwtKeys.PREVIOUS));
     }
 
-    /** 사용자 행을 만든다 (세션 등 FK 대상). User 엔티티는 S4에서 생긴다 */
+    /** 사용자 행을 바로 만든다 (가입 API를 거치지 않는 테스트용) */
     protected long createUser() {
         return jdbcTemplate.queryForObject("INSERT INTO users (nickname) VALUES ('테스트') RETURNING id", Long.class);
     }
@@ -68,12 +66,6 @@ public abstract class IntegrationTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     static class TestBeans {
-
-        @Bean
-        @Primary
-        FakeGroupAccessChecker fakeGroupAccessChecker() {
-            return new FakeGroupAccessChecker();
-        }
 
         @Bean
         @Primary

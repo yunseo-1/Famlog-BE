@@ -20,7 +20,7 @@ import com.famlog.support.IntegrationTest;
 
 /**
  * 요청 제한 (사양서 9.6, 9.9 SEC-T5 일부). 실제 Redis 컨테이너 + Bucket4j로 확인한다.
- * 한도 안의 요청은 본문이 없어 400(로그인·가입·재발급) 또는 API가 아직 없어 404(초대)로 끝난다. 429만 아니면 된다.
+ * 한도 안의 요청은 본문이 없어 400으로 끝난다. 429만 아니면 된다.
  */
 class RateLimitIntegrationTest extends IntegrationTest {
 
@@ -89,12 +89,12 @@ class RateLimitIntegrationTest extends IntegrationTest {
         long userId = randomId();
         String sharedIp = randomIp();
         for (int i = 0; i < 5; i++) {
-            mockMvc.perform(join(userId, sharedIp)).andExpect(status().isNotFound());
+            mockMvc.perform(join(userId, sharedIp)).andExpect(notLimited());
         }
 
         mockMvc.perform(join(userId, sharedIp)).andExpect(status().isTooManyRequests());
         // 같은 IP(같은 집 Wi-Fi)라도 다른 가족은 막히지 않는다
-        mockMvc.perform(join(randomId(), sharedIp)).andExpect(status().isNotFound());
+        mockMvc.perform(join(randomId(), sharedIp)).andExpect(notLimited());
     }
 
     @Test
