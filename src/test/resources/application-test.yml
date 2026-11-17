@@ -1,4 +1,8 @@
 # 테스트 프로필: DB 접속 정보는 Testcontainers(@ServiceConnection)가 넣는다. infra/.env 를 읽지 않는다.
+# 테스트 전용 컨트롤러(support.web)는 API 계약(openapi.yaml)에 넣지 않는다
+springdoc:
+  packages-to-exclude: com.famlog.support
+
 logging:
   level:
     com.famlog: DEBUG
