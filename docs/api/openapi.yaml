@@ -1,0 +1,919 @@
+openapi: 3.1.0
+info:
+  description: |
+    FamLog(팸로그) 가족 앱 서버 API. 기준: 통합 사양서 v2.0 11장.
+    - 시각은 +09:00 ISO-8601, 날짜만은 YYYY-MM-DD
+    - 실패 응답은 모두 ErrorResponse {code, message, traceId}. 앱은 code로 분기한다
+    - 401: AUTH_TOKEN_EXPIRED 면 /auth/refresh 후 재시도, AUTH_INVALID 면 로그인 화면
+  title: FamLog API
+  version: v1
+servers:
+- url: /
+security:
+- bearerAuth: []
+paths:
+  /api/v1/auth/logout:
+    post:
+      description: 이 기기의 세션을 폐기한다. 모르는 토큰이어도 204
+      operationId: logout
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      security: []
+      summary: 로그아웃
+      tags:
+      - auth-controller
+  /api/v1/auth/refresh:
+    post:
+      description: Refresh 토큰을 교체한다. 같은 토큰으로 동시에 두 번 부르지 않는다
+      operationId: refresh
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      security: []
+      summary: 토큰 재발급
+      tags:
+      - auth-controller
+  /api/v1/auth/{provider}/login:
+    post:
+      description: 가입되지 않은 계정이면 404 USER_NOT_REGISTERED → 가입 API로
+      operationId: login
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      security: []
+      summary: 소셜 로그인
+      tags:
+      - auth-controller
+  /api/v1/auth/{provider}/signup:
+    post:
+      description: 약관 동의 + 닉네임 + 출생연도월. 만 14세 미만이면 403 AGE_RESTRICTED
+      operationId: signup
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      security: []
+      summary: 소셜 가입
+      tags:
+      - auth-controller
+  /api/v1/groups:
+    post:
+      description: 만든 사람은 그룹장(OWNER). 단체 채팅방이 함께 생기고 현재 그룹이 된다
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetailResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 그룹 만들기
+      tags:
+      - group-controller
+  /api/v1/groups/join:
+    post:
+      description: "없는 코드 404, 만료 410 INVITE_EXPIRED, 연속 5회 실패 시 10분 잠금 429. 이미 구성\
+        원이면 그대로 200"
+      operationId: join
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetailResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 초대 코드로 참여
+      tags:
+      - group-controller
+  /api/v1/groups/me:
+    get:
+      description: 채팅 탭(SCR-10)·그룹 전환(SCR-70)용
+      operationId: myGroups
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupSummaryResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 그룹 목록
+      tags:
+      - group-controller
+  /api/v1/groups/{groupId}:
+    delete:
+      description: 즉시 접근이 막히고 30일 뒤 파기된다
+      operationId: delete
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 그룹 삭제 (그룹장)
+      tags:
+      - group-controller
+    get:
+      operationId: detail
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetailResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 그룹과 구성원
+      tags:
+      - group-controller
+  /api/v1/groups/{groupId}/invites:
+    post:
+      description: 7일 유효. 재발급하면 이전 코드는 바로 만료
+      operationId: issueInvite
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 초대 코드 발급·재발급 (그룹장·관리자)
+      tags:
+      - group-controller
+  /api/v1/groups/{groupId}/leave:
+    post:
+      description: 다른 구성원이 있는 그룹장은 409 OWNER_TRANSFER_REQUIRED. 혼자 남은 그룹장이 나가면 그룹
+        삭제 예정
+      operationId: leave
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 나가기
+      tags:
+      - group-controller
+  /api/v1/groups/{groupId}/members/me:
+    patch:
+      description: 보낸 값만 바꾼다 (SCR-03)
+      operationId: updateMe
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMyMemberRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 가족 역할·호칭·캘린더 색
+      tags:
+      - group-controller
+  /api/v1/groups/{groupId}/members/{userId}:
+    delete:
+      description: 그룹장은 내보낼 수 없다
+      operationId: kick
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내보내기 (그룹장·관리자)
+      tags:
+      - group-controller
+    patch:
+      description: role=OWNER 는 위임이며 그룹장만 가능
+      operationId: changeRole
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 권한 변경·그룹장 위임 (그룹장·관리자)
+      tags:
+      - group-controller
+  /api/v1/users/me/current-group:
+    put:
+      description: 구성원인 그룹만. 아니면 403 GROUP_NOT_MEMBER
+      operationId: change
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CurrentGroupRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 현재 그룹 바꾸기
+      tags:
+      - current-group-controller
+  /api/v1/users/me/sessions:
+    get:
+      description: 최근 사용 순. current=true가 지금 기기
+      operationId: list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 로그인한 기기 목록
+      tags:
+      - user-session-controller
+  /api/v1/users/me/sessions/{sessionId}:
+    delete:
+      description: 그 기기의 다음 API 호출부터 401. 내 세션이 아니면 404
+      operationId: revoke
+      parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 기기 로그아웃
+      tags:
+      - user-session-controller
+  /error:
+    delete:
+      operationId: error_3
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    get:
+      operationId: error
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    head:
+      operationId: error_5
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    options:
+      operationId: error_6
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    patch:
+      operationId: error_4
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    post:
+      operationId: error_1
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+    put:
+      operationId: error_2
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - famlog-error-controller
+components:
+  schemas:
+    AgreementsRequest:
+      type: object
+      properties:
+        privacyVersion:
+          type: string
+          description: 동의한 개인정보 수집·이용 버전
+          maxLength: 20
+          minLength: 0
+        termsVersion:
+          type: string
+          description: 동의한 이용약관 버전
+          maxLength: 20
+          minLength: 0
+      required:
+      - privacyVersion
+      - termsVersion
+    AuthResponse:
+      type: object
+      properties:
+        tokens:
+          $ref: "#/components/schemas/TokenResponse"
+        user:
+          $ref: "#/components/schemas/UserResponse"
+    ChangeRoleRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          description: OWNER로 바꾸면 그룹장 위임 (그룹장만 가능)
+          enum:
+          - MEMBER
+          - ADMIN
+          - OWNER
+      required:
+      - role
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: 우리 가족
+          maxLength: 30
+          minLength: 0
+      required:
+      - name
+    CurrentGroupRequest:
+      type: object
+      properties:
+        groupId:
+          type: integer
+          format: int64
+      required:
+      - groupId
+    DeviceRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          description: 앱 설치마다 만든 무작위 ID
+          maxLength: 100
+          minLength: 0
+        deviceName:
+          type: string
+          description: "기기 관리 화면에 보일 이름 (예: Galaxy S25)"
+          maxLength: 100
+          minLength: 0
+        platform:
+          type: string
+          enum:
+          - ANDROID
+          - IOS
+      required:
+      - deviceId
+      - platform
+    ErrorResponse:
+      properties:
+        code:
+          type: string
+          description: 에러 코드 (사양서 11.2)
+          enum:
+          - VALIDATION_FAILED
+          - AUTH_TOKEN_EXPIRED
+          - AUTH_INVALID
+          - GROUP_NOT_MEMBER
+          - GROUP_ROLE_REQUIRED
+          - AGE_RESTRICTED
+          - NOT_FOUND
+          - USER_NOT_REGISTERED
+          - METHOD_NOT_ALLOWED
+          - CANDIDATE_ALREADY_DECIDED
+          - VERSION_CONFLICT
+          - GROUP_LIMIT_EXCEEDED
+          - OWNER_TRANSFER_REQUIRED
+          - INVITE_EXPIRED
+          - CANDIDATE_MISSING_FIELDS
+          - UPGRADE_REQUIRED
+          - RATE_LIMITED
+          - INTERNAL_ERROR
+        fieldErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+        message:
+          type: string
+        traceId:
+          type: string
+    FieldError:
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+    GroupDetailResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        imageKey:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberResponse"
+        myRole:
+          type: string
+          enum:
+          - MEMBER
+          - ADMIN
+          - OWNER
+        name:
+          type: string
+    GroupSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        imageKey:
+          type: string
+        memberCount:
+          type: integer
+          format: int64
+        myRole:
+          type: string
+          enum:
+          - MEMBER
+          - ADMIN
+          - OWNER
+        name:
+          type: string
+    InviteResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        link:
+          type: string
+    JoinRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 8자리 초대 코드. 대소문자·공백·하이픈은 무시
+          example: K7MP-Q2XA
+          maxLength: 20
+          minLength: 0
+      required:
+      - code
+    LoginRequest:
+      type: object
+      properties:
+        device:
+          $ref: "#/components/schemas/DeviceRequest"
+        providerToken:
+          type: string
+          description: "카카오: 액세스 토큰 / Google: ID 토큰"
+          maxLength: 4096
+          minLength: 0
+      required:
+      - device
+      - providerToken
+    MemberResponse:
+      type: object
+      properties:
+        calendarColor:
+          type: string
+        familyRole:
+          type: string
+          enum:
+          - FATHER
+          - MOTHER
+          - SON
+          - DAUGHTER
+          - GRANDFATHER
+          - GRANDMOTHER
+          - OTHER
+        familyTitle:
+          type: string
+        nickname:
+          type: string
+        profileImageKey:
+          type: string
+        role:
+          type: string
+          enum:
+          - MEMBER
+          - ADMIN
+          - OWNER
+        userId:
+          type: integer
+          format: int64
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - refreshToken
+    SessionResponse:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+        deviceName:
+          type: string
+        lastUsedAt:
+          type: string
+          format: date-time
+        platform:
+          type: string
+          enum:
+          - ANDROID
+          - IOS
+        sessionId:
+          type: integer
+          format: int64
+    SignupRequest:
+      type: object
+      properties:
+        agreements:
+          $ref: "#/components/schemas/AgreementsRequest"
+        birthYm:
+          type: string
+          description: 출생연도·월 YYYYMM. 만 14세 확인에만 쓴다
+          example: "199003"
+          minLength: 1
+          pattern: "\\d{6}"
+        device:
+          $ref: "#/components/schemas/DeviceRequest"
+        nickname:
+          type: string
+          description: 가족에게 보일 이름 (1~30자)
+          maxLength: 30
+          minLength: 0
+        providerToken:
+          type: string
+          maxLength: 4096
+          minLength: 0
+      required:
+      - agreements
+      - birthYm
+      - device
+      - nickname
+      - providerToken
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        accessTokenExpiresAt:
+          type: string
+          format: date-time
+        refreshToken:
+          type: string
+        refreshTokenExpiresAt:
+          type: string
+          format: date-time
+    UpdateMyMemberRequest:
+      type: object
+      properties:
+        calendarColor:
+          type: string
+          description: "팔레트 색 #RRGGBB"
+          example: "#14A3B8"
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        familyRole:
+          type: string
+          enum:
+          - FATHER
+          - MOTHER
+          - SON
+          - DAUGHTER
+          - GRANDFATHER
+          - GRANDMOTHER
+          - OTHER
+        familyTitle:
+          type: string
+          description: "호칭 (큰아들, 막내)"
+          maxLength: 20
+          minLength: 0
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        lastGroupId:
+          type: integer
+          format: int64
+        nickname:
+          type: string
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      description: Access 토큰 (30분)
+      scheme: bearer
+      type: http

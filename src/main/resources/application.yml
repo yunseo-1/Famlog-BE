@@ -42,6 +42,8 @@ springdoc:
   api-docs:
     path: /v3/api-docs
   default-produces-media-type: application/json
+  packages-to-scan: com.famlog
+  writer-with-order-by-keys: true   # 내보낸 openapi.yaml 이 매번 같은 순서가 되게
 
 logging:
   structured:

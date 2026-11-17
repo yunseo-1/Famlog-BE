@@ -63,3 +63,19 @@ tasks.named('test') {
     // 테스트 DB 이미지(infra/postgres)를 빌드할 때 저장소 루트 기준 경로를 쓴다
     systemProperty 'famlog.repoRoot', rootDir.absolutePath
 }
+
+// API 계약 docs/api/openapi.yaml 을 지금 코드로 다시 만든다 (Docker 필요: 테스트 컨텍스트로 생성)
+// 문서 레포로 옮기기: sh scripts/export-openapi.sh <문서 레포 경로>
+tasks.register('updateOpenApi', Test) {
+    description = 'docs/api/openapi.yaml 을 현재 API로 다시 만든다'
+    group = 'documentation'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'com.famlog.OpenApiContractTest.저장된_API_계약이_지금_코드와_같다'
+    }
+    systemProperty 'famlog.repoRoot', rootDir.absolutePath
+    systemProperty 'famlog.openapi.write', 'true'
+    outputs.upToDateWhen { false }
+}

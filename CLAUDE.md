@@ -76,6 +76,7 @@ Famlog-BE/
 - 화면 작업 시: 먼저 `docs/design/figma-map.md`와 `docs/design/screenshots/`를 본다.
   Figma MCP는 **Starter 요금제라 호출 한도가 작다.** 로컬 문서로 부족할 때만 특정 노드 ID 하나에 대해
   `get_design_context` / `get_screenshot`을 호출한다. 파일 전체를 훑는 호출은 하지 않는다.
+- API를 바꾸면 `./gradlew updateOpenApi`로 `docs/api/openapi.yaml`을 다시 만들어 같은 커밋에 넣는다.
 - 커밋 메시지: `feat(SCH-02): 구성원별 일정 조회 API` 형식.
 - 작업이 끝나면 `docs/handoff/HANDOFF.md`의 "진행 현황"을 갱신한다.
 
@@ -88,4 +89,7 @@ docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build -
 ./gradlew test
 ./gradlew bootRun          # 기본 프로필 local: infra/.env 를 읽어 로컬 인프라에 접속
 # 확인: http://localhost:8080/actuator/health, http://localhost:8080/v3/api-docs
+# API 계약: API를 바꿨으면 다시 만들어 함께 커밋 (안 하면 CI 실패). 머지 후 문서 레포로 복사
+./gradlew updateOpenApi
+sh scripts/export-openapi.sh <문서 레포 경로>
 ```
