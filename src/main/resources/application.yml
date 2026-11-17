@@ -80,6 +80,16 @@ famlog:
     send-rate-period: 1s
     default-page-size: 50
     max-page-size: 100
+  # 사진·동영상 (사양서 4.2 CHAT-05, 8.6, 9.1). S3 접속 값은 환경별 설정에서 넣는다
+  media:
+    max-items: 30
+    max-image-size: 30MB
+    max-video-size: 500MB
+    max-video-seconds: 300
+    upload-url-ttl: 10m
+    download-url-ttl: 10m
+    # 사진 위치 저장. 위치기반서비스 신고를 확인하기 전까지 끈다 (사양서 8.6 출시 전 할 일)
+    photo-location-enabled: false
   # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
   consent:
     terms-version: "1.0"

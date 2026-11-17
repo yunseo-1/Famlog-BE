@@ -5,7 +5,7 @@
 - 담당자: 김윤서 (기획·백엔드·안드로이드, 1인 개발)
 - **이 사본은 백엔드 저장소(`Famlog-BE`) 기준이다.** 서버·워커·인프라 진행은 여기 8장에 기록한다.
   Android 진행은 모바일 저장소(`Famlog-moblie`)의 HANDOFF, 사양 원본은 문서 레포(`Famlog`)에 있다.
-- 최종 갱신: 2026-11-17 (S1~S5·S8 완료, API 계약 내보내기)
+- 최종 갱신: 2026-11-17 (S1~S5·S8·S9 완료)
 
 ---
 
@@ -54,6 +54,13 @@
 | 11/17 | 공감: 한 사람당 1개, 6종 고정(HEART·LIKE·LAUGH·WOW·SAD·PRAY) | 서버는 이름만, 그림은 앱 |
 | 11/17 | 삭제 거부는 403 `MESSAGE_NOT_DELETABLE` | 남의 메시지·5분 경과·시스템 메시지 |
 | 11/17 | 그룹에서 나가거나 세션이 폐기되면 서버가 WebSocket 연결을 끊는다 | 이미 구독한 토픽을 계속 받지 않게 |
+| 11/17 | 워커는 이 저장소 `worker/` (Python 3.12, Docker 이미지로 실행·테스트) | CLAUDE.md 구조, 로컬에 Python·FFmpeg 설치 불필요 |
+| 11/17 | 사진은 묶음 메시지 1개(`IMAGE`, 30장까지), 동영상은 1개씩(`VIDEO`). 업로드 → 완료 → STOMP 전송 | 카카오톡 방식, 썸네일은 `media.updated`로 나중에 |
+| 11/17 | 내려받기는 `GET /media/{id}/content?variant=` → 10분 Presigned URL로 302 | 앱 이미지 캐시 키 고정, 토큰은 저장소로 안 감 |
+| 11/17 | 사진 원본은 다시 인코딩(회전 적용, 메타데이터 전부 제거, HEIC→JPEG), 동영상은 `-c copy`로 메타데이터만 제거 | GPS 제거 + 위장 내용 무력화 (9.1) |
+| 11/17 | 워커는 S3·Redis만 쓰고 DB 반영은 API(`media-results` 스트림 소비) | 스키마·WebSocket 이벤트는 Java만 관리 |
+| 11/17 | 사진 위치 저장은 `famlog.media.photo-location-enabled=false`(기본) + LOCATION 동의일 때만, 저장 시 `location_access_logs` | 위치기반서비스 신고 확인 전 (8.6) |
+| 11/17 | pHash·흐림 점수·워커 FastAPI는 앨범 단계로 미룸 | 지금 쓰는 곳이 없음 |
 
 ## 3. Figma 상태
 
@@ -106,8 +113,8 @@
 | S5 | GRP-01~05 가족 그룹·초대·역할·구성원 관리 | ✅ PR #6 |
 | - | API 계약 `docs/api/openapi.yaml` 생성·CI 확인 | ✅ PR #7 |
 | S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ 이번 PR |
-| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | 다음 |
-| S11 | NOTI-01 FCM 푸시 (+ 새 기기 로그인 알림) | |
+| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ 이번 PR |
+| S11 | NOTI-01 FCM 푸시 (+ 새 기기 로그인 알림) | 다음 |
 | S12 | SCH-01~04, TODO-01 | |
 | S14 | PLC-01~06 | |
 | S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | |
@@ -133,9 +140,22 @@
 - 전송 제한 초당 5개/사용자: 오프라인 대기열을 한꺼번에 보내면 `RATE_LIMITED`가 올 수 있다 → 잠시 뒤 같은 clientMessageId로 다시 보낸다
 - 답장 원문이 내가 들어오기 전 메시지면 `replyTo.body`가 null이다 (그룹 이벤트는 구성원 모두가 볼 수 있을 때만 본문을 넣는다. 앱 캐시에 있으면 그걸 쓴다)
 
+### 사진·동영상 규칙 (S9, 앱 S10 참고)
+
+1. `POST /media/upload-urls {groupId, items:[{mimeType, size}]}` → `items[].{mediaId, uploadUrl, headers, expiresAt}` (10분)
+   - 사진 jpeg·png·webp·heic·heif 30MB, 동영상 mp4·mov 500MB·5분, 한 번에 30개
+2. `uploadUrl`에 **응답의 headers(Content-Type)를 그대로 넣어** PUT (크기도 신고한 값과 같아야 한다)
+3. `POST /media/{id}/complete` → `UPLOADED`. 형식이 다르면 400(파일 삭제). 실패하면 다시 불러도 된다
+4. STOMP `/pub/groups/{id}/messages {clientMessageId, type:"IMAGE", mediaIds:[...]}` (사진 1~30, 보이는 순서) 또는 `type:"VIDEO", mediaIds:[하나]`
+5. 메시지의 `media[].status`가 `UPLOADED`면 처리 중 → 그룹 이벤트 `media.updated {messageId, media}`로 `READY`(또는 `FAILED`·`REJECTED`)가 온다
+6. 보기: `GET /api/v1/media/{id}/content?variant=THUMB_S|THUMB_M|THUMB_L|ORIGINAL` (Authorization 헤더, 302 따라가기). READY 전에는 404
+- 로컬 에뮬레이터에서 업로드하려면 `infra/.env`에 `S3_PUBLIC_ENDPOINT=http://10.0.2.2:8333`
+
 ### 다음 단계로 넘긴 것
 
-- S9: 사진·동영상 메시지(IMAGE·VIDEO), 메시지 `payload`에 미디어 정보
+- S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
+- 앨범 단계: pHash·흐림 점수, `GET /groups/{id}/media?month=`
+- 출시 전: 위치기반서비스 신고 확인 후 `photo-location-enabled` 켜기, "사진 위치 사용" 동의 API(설정 화면)
 - S11: 새 기기 로그인 알림, 입장·내보내기 푸시, 새 메시지 푸시(`notif_muted`·방해 금지)
 - S12~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
 - S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리, `group_settings`(AI 분석 설정)
@@ -154,6 +174,10 @@
 | 11.2 (S8) | 에러 코드 `MESSAGE_NOT_DELETABLE`(403) |
 | 11.3 (S8) | `DELETE /messages/{id}/reactions/me` 추가, `GET /groups/me`에 `lastMessage`·`unreadCount`, 메시지 목록 응답 `{items, hasMore}` |
 | 11.4 (S8) | 연결 주소 `/ws`, 이벤트 형식 `{type, data}`, 이벤트 `reaction.updated`·`error`·`session.revoked`, ERROR 프레임 규칙 |
+| 10.2 (S9) | `media_assets`: `scan_status` → `status`(PENDING_UPLOAD·UPLOADED·READY·FAILED·REJECTED), `reject_reason`·`upload_expires_at` 추가 / `location_access_logs.target_id` 추가 |
+| 11.3 (S9) | `GET /media/{id}/content?variant=` 추가, 메시지 전송에 `type`·`mediaIds`, 메시지 응답에 `media` |
+| 11.4 (S9) | 이벤트 `media.updated` |
+| 13.2 (S9) | 워커 FastAPI·OpenCV·imagehash는 앨범 단계로 미룸, 워커 이미지 python:3.12-slim + FFmpeg |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -178,4 +202,5 @@
 | 2026-11-14 | GRP-01~05 | 그룹 생성·초대(잠금)·전환·가족 역할·권한·위임·내보내기·나가기, 감사 로그(V3) | feat(GRP-01~05) `d7660b5` |
 | 2026-11-17 | - | API 계약 `docs/api/openapi.yaml` 생성(`updateOpenApi`)·CI 확인, 문서 레포 내보내기 스크립트, HANDOFF 갱신 | chore(api) `3310f85` |
 | 2026-11-17 | CHAT-01~04·06 | STOMP 실시간 채팅(JWT CONNECT, 구독·전송마다 구성원 확인), 방별 seq·clientMessageId 멱등(V4), Redis Pub/Sub 중계, 내역 페이징, 읽음·안 읽은 수, 답장·공감·5분 삭제, 입장·퇴장 시스템 메시지, 나감·로그아웃 시 연결 끊기 | feat(CHAT) `3426af7` |
-| 2026-11-17 | CHAT-02 | Redis 중계 수신을 스레드 하나로 처리해 이벤트 순서 보장 (기본 컨테이너는 메시지마다 새 스레드 → main CI #12에서 read.updated가 message.created보다 먼저 도착) | fix(CHAT-02) |
+| 2026-11-17 | CHAT-02 | Redis 중계 수신을 스레드 하나로 처리해 이벤트 순서 보장 (기본 컨테이너는 메시지마다 새 스레드 → main CI #12에서 read.updated가 message.created보다 먼저 도착) | fix(CHAT-02) `3bcbed4` |
+| 2026-11-17 | CHAT-05 | 미디어 업로드(Presigned PUT·매직 바이트 검사, V5), Redis Streams 처리 요청·결과, 사진 묶음·동영상 메시지, 302 내려받기, Python 워커(GPS 제거·재인코딩·썸네일 3단계·촬영 시각·재시도 3회 후 DLQ), compose·CI | feat(CHAT-05) |

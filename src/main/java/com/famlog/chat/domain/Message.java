@@ -58,7 +58,7 @@ public class Message extends BaseTimeEntity {
 
     private String body;
 
-    /** 종류별 추가 정보 JSON (시스템 메시지: {"kind":"MEMBER_JOINED","userId":1}) */
+    /** 종류별 추가 정보 JSON (시스템: {"kind":"MEMBER_JOINED","userId":1}, 사진·동영상: {"mediaIds":[1,2]}) */
     @JdbcTypeCode(SqlTypes.JSON)
     private String payload;
 
@@ -77,6 +77,20 @@ public class Message extends BaseTimeEntity {
         message.clientMessageId = clientMessageId;
         message.type = MessageType.TEXT;
         message.body = body;
+        message.replyToId = replyToId;
+        return message;
+    }
+
+    /** 사진 묶음·동영상. payload = {"mediaIds": [...]} (보낸 순서) */
+    public static Message media(long roomId, long seq, long senderId, UUID clientMessageId, MessageType type,
+            String payload, Long replyToId) {
+        Message message = new Message();
+        message.roomId = roomId;
+        message.seq = seq;
+        message.senderId = senderId;
+        message.clientMessageId = clientMessageId;
+        message.type = type;
+        message.payload = payload;
         message.replyToId = replyToId;
         return message;
     }
