@@ -177,4 +177,5 @@
 | 2026-11-13 | AUTH-01~03 | 카카오·Google 로그인·가입, 만 14세 확인, 기기 목록·원격 로그아웃 | feat(AUTH-01~03) `b6de551` |
 | 2026-11-14 | GRP-01~05 | 그룹 생성·초대(잠금)·전환·가족 역할·권한·위임·내보내기·나가기, 감사 로그(V3) | feat(GRP-01~05) `d7660b5` |
 | 2026-11-17 | - | API 계약 `docs/api/openapi.yaml` 생성(`updateOpenApi`)·CI 확인, 문서 레포 내보내기 스크립트, HANDOFF 갱신 | chore(api) `3310f85` |
-| 2026-11-17 | CHAT-01~04·06 | STOMP 실시간 채팅(JWT CONNECT, 구독·전송마다 구성원 확인), 방별 seq·clientMessageId 멱등(V4), Redis Pub/Sub 중계, 내역 페이징, 읽음·안 읽은 수, 답장·공감·5분 삭제, 입장·퇴장 시스템 메시지, 나감·로그아웃 시 연결 끊기 | feat(CHAT) |
+| 2026-11-17 | CHAT-01~04·06 | STOMP 실시간 채팅(JWT CONNECT, 구독·전송마다 구성원 확인), 방별 seq·clientMessageId 멱등(V4), Redis Pub/Sub 중계, 내역 페이징, 읽음·안 읽은 수, 답장·공감·5분 삭제, 입장·퇴장 시스템 메시지, 나감·로그아웃 시 연결 끊기 | feat(CHAT) `3426af7` |
+| 2026-11-17 | CHAT-02 | Redis 중계 수신을 스레드 하나로 처리해 이벤트 순서 보장 (기본 컨테이너는 메시지마다 새 스레드 → main CI #12에서 read.updated가 message.created보다 먼저 도착) | fix(CHAT-02) |
