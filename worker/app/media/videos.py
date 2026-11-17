@@ -3,6 +3,7 @@
 - 길이·해상도는 ffprobe 로 읽고, 5분을 넘으면 거부한다.
 - 원본은 다시 인코딩하지 않고(-c copy) 영상·소리 트랙만 남긴 채 메타데이터를 모두 지운다.
   iPhone 등의 위치(©xyz, com.apple.quicktime.location.ISO6709)와 위치 메타데이터 트랙이 함께 빠진다.
+  컨테이너에 담을 수 없는 소리(AMR-NB 등)면 영상은 그대로 두고 소리만 AAC로 바꾼다.
 - 미리보기는 1초 지점(짧으면 가운데) 프레임으로 사진과 같은 썸네일 3단계를 만든다.
 """
 
@@ -66,12 +67,8 @@ def process_video(source: Path, workdir: Path, mime: str, extract_location: bool
 
     container = "mov" if mime == "video/quicktime" else "mp4"
     cleaned = workdir / f"clean.{container}"
-    _run([
-        "ffmpeg", "-y", "-v", "error", "-i", str(source),
-        "-map", "0:v:0", "-map", "0:a?", "-c", "copy",
-        "-map_metadata", "-1", "-map_metadata:s:v", "-1", "-map_metadata:s:a", "-1", "-map_chapters", "-1",
-        "-movflags", "+faststart", "-f", container, str(cleaned),
-    ])
+    has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+    _strip_metadata(source, cleaned, container, has_audio)
 
     poster = workdir / "poster.jpg"
     _run([
@@ -94,10 +91,31 @@ def process_video(source: Path, workdir: Path, mime: str, extract_location: bool
     )
 
 
+def _strip_metadata(source: Path, cleaned: Path, container: str, has_audio: bool) -> None:
+    """그대로 복사해 보고, 소리 코덱을 컨테이너가 받지 않으면 소리만 AAC로 바꿔 한 번 더 시도한다"""
+    def command(codecs: list[str]) -> list[str]:
+        return [
+            "ffmpeg", "-y", "-v", "error", "-i", str(source),
+            "-map", "0:v:0", "-map", "0:a?", *codecs,
+            "-map_metadata", "-1", "-map_metadata:s:v", "-1", "-map_metadata:s:a", "-1", "-map_chapters", "-1",
+            "-movflags", "+faststart", "-f", container, str(cleaned),
+        ]
+
+    if _succeeds(command(["-c", "copy"])):
+        return
+    if has_audio and _succeeds(command(["-c:v", "copy", "-c:a", "aac", "-b:a", "128k"])):
+        return
+    raise Rejected("UNSUPPORTED_CODEC")
+
+
 def _run(command: list[str]) -> None:
-    result = subprocess.run(command, capture_output=True, timeout=_TIMEOUT_SECONDS, check=False)
-    if result.returncode != 0:
+    if not _succeeds(command):
         raise Rejected("NOT_A_VIDEO")
+
+
+def _succeeds(command: list[str]) -> bool:
+    result = subprocess.run(command, capture_output=True, timeout=_TIMEOUT_SECONDS, check=False)
+    return result.returncode == 0
 
 
 def _rotation(stream: dict) -> int:

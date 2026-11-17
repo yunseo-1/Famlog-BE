@@ -61,6 +61,7 @@
 | 11/17 | 워커는 S3·Redis만 쓰고 DB 반영은 API(`media-results` 스트림 소비) | 스키마·WebSocket 이벤트는 Java만 관리 |
 | 11/17 | 사진 위치 저장은 `famlog.media.photo-location-enabled=false`(기본) + LOCATION 동의일 때만, 저장 시 `location_access_logs` | 위치기반서비스 신고 확인 전 (8.6) |
 | 11/17 | pHash·흐림 점수·워커 FastAPI는 앨범 단계로 미룸 | 지금 쓰는 곳이 없음 |
+| 11/18 | 동영상 소리가 컨테이너에 못 들어가면(AMR-NB 등) 영상은 그대로, 소리만 AAC로 변환. 그래도 안 되면 `UNSUPPORTED_CODEC` | 에뮬레이터 카메라 영상이 `NOT_A_VIDEO`로 거부됨 (모바일 S10-2) |
 
 ## 3. Figma 상태
 
@@ -148,6 +149,7 @@
 3. `POST /media/{id}/complete` → `UPLOADED`. 형식이 다르면 400(파일 삭제). 실패하면 다시 불러도 된다
 4. STOMP `/pub/groups/{id}/messages {clientMessageId, type:"IMAGE", mediaIds:[...]}` (사진 1~30, 보이는 순서) 또는 `type:"VIDEO", mediaIds:[하나]`
 5. 메시지의 `media[].status`가 `UPLOADED`면 처리 중 → 그룹 이벤트 `media.updated {messageId, media}`로 `READY`(또는 `FAILED`·`REJECTED`)가 온다
+   - 거부 사유(`media_assets.reject_reason`, API 응답에는 없음): 사진 `NOT_AN_IMAGE` 등, 동영상 `NOT_A_VIDEO`(읽을 수 없음)·`TOO_LONG`(5분 초과)·`UNSUPPORTED_CODEC`(소리를 AAC로 바꿔도 mp4·mov에 담을 수 없는 코덱)
 6. 보기: `GET /api/v1/media/{id}/content?variant=THUMB_S|THUMB_M|THUMB_L|ORIGINAL` (Authorization 헤더, 302 따라가기). READY 전에는 404
 - 로컬 에뮬레이터에서 업로드하려면 `infra/.env`에 `S3_PUBLIC_ENDPOINT=http://10.0.2.2:8333`
 
@@ -204,3 +206,4 @@
 | 2026-11-17 | CHAT-01~04·06 | STOMP 실시간 채팅(JWT CONNECT, 구독·전송마다 구성원 확인), 방별 seq·clientMessageId 멱등(V4), Redis Pub/Sub 중계, 내역 페이징, 읽음·안 읽은 수, 답장·공감·5분 삭제, 입장·퇴장 시스템 메시지, 나감·로그아웃 시 연결 끊기 | feat(CHAT) `3426af7` |
 | 2026-11-17 | CHAT-02 | Redis 중계 수신을 스레드 하나로 처리해 이벤트 순서 보장 (기본 컨테이너는 메시지마다 새 스레드 → main CI #12에서 read.updated가 message.created보다 먼저 도착) | fix(CHAT-02) `3bcbed4` |
 | 2026-11-17 | CHAT-05 | 미디어 업로드(Presigned PUT·매직 바이트 검사, V5), Redis Streams 처리 요청·결과, 사진 묶음·동영상 메시지, 302 내려받기, Python 워커(GPS 제거·재인코딩·썸네일 3단계·촬영 시각·재시도 3회 후 DLQ), compose·CI | feat(CHAT-05) |
+| 2026-11-18 | CHAT-05 | 워커: AMR-NB 등 컨테이너에 못 넣는 소리는 AAC로만 변환(영상은 복사 유지), 그래도 실패하면 `UNSUPPORTED_CODEC` | fix(CHAT-05) |

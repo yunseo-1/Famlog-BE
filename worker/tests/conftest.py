@@ -41,16 +41,27 @@ requires_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffm
 @pytest.fixture
 def mp4_with_gps(tmp_path: Path) -> Path:
     """2초 320x240 영상 + 소리, 위치·촬영 시각 메타데이터 포함"""
-    path = tmp_path / "gps.mp4"
+    return make_video(tmp_path / "gps.mp4", "libx264", "aac", "mp4")
+
+
+def make_video(path: Path, video_codec: str, audio_codec: str | None, container: str) -> Path:
+    """2초 320x240 영상, 위치·촬영 시각 메타데이터 포함. audio_codec 이 None 이면 소리 없음"""
+    audio = ["-f", "lavfi", "-i", "sine=duration=2"] if audio_codec else []
+    codecs = ["-c:v", video_codec, "-pix_fmt", "yuv420p"] + (["-c:a", audio_codec] if audio_codec else [])
     subprocess.run([
         "ffmpeg", "-y", "-v", "error",
-        "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10",
-        "-f", "lavfi", "-i", "sine=duration=2",
+        "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10", *audio,
         "-metadata", "location=+37.5665+126.9780/",
         "-metadata", "creation_time=2026-11-14T02:30:00Z",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path),
+        *codecs, "-shortest", "-f", container, str(path),
     ], check=True, capture_output=True)
     return path
+
+
+@pytest.fixture
+def mp4_with_pcm_audio(tmp_path: Path) -> Path:
+    """mp4 에 담을 수 없는 소리(AMR-NB 와 같은 경우). 테스트 이미지 FFmpeg 에 AMR 인코더가 없어 PCM 으로 대신한다"""
+    return make_video(tmp_path / "pcm.mp4", "libx264", "pcm_s16le", "mov")
 
 
 def probe_tags(path: Path) -> dict:
