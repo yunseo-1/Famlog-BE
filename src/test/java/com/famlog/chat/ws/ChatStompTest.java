@@ -152,7 +152,7 @@ class ChatStompTest extends ChatIntegrationTest {
             List<Callable<Long>> tasks = new ArrayList<>();
             for (long sender : senders) {
                 for (int i = 0; i < 4; i++) {
-                    tasks.add(() -> chatService.send(groupId, sender, UUID.randomUUID().toString(), "동시에", null)
+                    tasks.add(() -> chatService.send(groupId, sender, text("동시에", null))
                             .message().seq());
                 }
             }

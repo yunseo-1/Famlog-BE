@@ -60,7 +60,7 @@ Famlog-BE/
 │                           album,video,story,assistant,notification,common}
 │                           각 모듈: controller / service / domain / repository / dto
 ├ src/main/resources/db/migration/   Flyway (V1__*.sql …)
-├ worker/    (예정) Python 워커 app/{consumers,ai,media,video,prompts}, evals/
+├ worker/    Python 워커 app/{media, consumer, processor, ...}, tests/ (S9 미디어부터. ai·video는 해당 단계에서)
 ├ infra/     docker-compose.yml, .env.example, postgres/, seaweedfs/ (README.md 참고)
 └ docs/      spec/, design/, handoff/, adr/
 ```
@@ -89,6 +89,8 @@ docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build -
 ./gradlew test
 ./gradlew bootRun          # 기본 프로필 local: infra/.env 를 읽어 로컬 인프라에 접속
 # 확인: http://localhost:8080/actuator/health, http://localhost:8080/v3/api-docs
+# 워커 테스트 (Docker로 Python 3.12 + FFmpeg 이미지에서 실행)
+docker build --target test -t famlog-worker-test worker && docker run --rm famlog-worker-test
 # API 계약: API를 바꿨으면 다시 만들어 함께 커밋 (안 하면 CI 실패). 머지 후 문서 레포로 복사
 ./gradlew updateOpenApi
 sh scripts/export-openapi.sh <문서 레포 경로>

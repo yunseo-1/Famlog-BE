@@ -48,8 +48,7 @@ public class ChatStompController {
             return error(ErrorCode.VALIDATION_FAILED, ErrorCode.VALIDATION_FAILED.getMessage(), clientMessageId);
         }
         try {
-            SendResult result = chatService.send(groupId, userId(principal), clientMessageId, request.body(),
-                    request.replyToId());
+            SendResult result = chatService.send(groupId, userId(principal), request);
             return result.duplicate() ? new ChatEvent(ChatEvent.MESSAGE_CREATED, result.message()) : null;
         } catch (BusinessException e) {
             return error(e.getErrorCode(), e.getMessage(), clientMessageId);

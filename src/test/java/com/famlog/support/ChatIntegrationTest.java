@@ -1,12 +1,15 @@
 package com.famlog.support;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import com.famlog.auth.jwt.AccessTokenIssuer;
+import com.famlog.chat.domain.MessageType;
 import com.famlog.chat.dto.ChatDtos.MessageResponse;
+import com.famlog.chat.dto.ChatDtos.SendMessageRequest;
 import com.famlog.chat.service.ChatService;
 
 /** 채팅 테스트 베이스: 메시지 보내기, 실제 Access 토큰 발급 도우미. */
@@ -28,7 +31,18 @@ public abstract class ChatIntegrationTest extends IntegrationTest {
 
     protected MessageResponse send(long groupId, long userId, String body, Long replyToId) {
         resetSendRate(userId);
-        return chatService.send(groupId, userId, UUID.randomUUID().toString(), body, replyToId).message();
+        return chatService.send(groupId, userId, text(body, replyToId)).message();
+    }
+
+    /** 사진 묶음·동영상 메시지 */
+    protected MessageResponse sendMedia(long groupId, long userId, MessageType type, List<Long> mediaIds) {
+        resetSendRate(userId);
+        return chatService.send(groupId, userId,
+                new SendMessageRequest(UUID.randomUUID().toString(), type, null, mediaIds, null)).message();
+    }
+
+    protected static SendMessageRequest text(String body, Long replyToId) {
+        return new SendMessageRequest(UUID.randomUUID().toString(), null, body, null, replyToId);
     }
 
     protected void resetSendRate(long userId) {

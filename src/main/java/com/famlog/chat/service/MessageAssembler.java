@@ -1,6 +1,7 @@
 package com.famlog.chat.service;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,9 @@ import com.famlog.chat.repository.MessageReactionRepository;
 import com.famlog.chat.repository.MessageRepository;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.repository.GroupMemberRepository;
+import com.famlog.media.domain.MediaAsset;
+import com.famlog.media.dto.MediaDtos.MediaResponse;
+import com.famlog.media.repository.MediaAssetRepository;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.core.type.TypeReference;
@@ -41,6 +45,7 @@ class MessageAssembler {
     private final MessageRepository messageRepository;
     private final MessageReactionRepository reactionRepository;
     private final GroupMemberRepository memberRepository;
+    private final MediaAssetRepository mediaRepository;
     private final JsonMapper jsonMapper;
 
     /** 그룹 전체에 보내는 응답. 답장 원문은 지금 구성원 모두가 볼 수 있을 때만 본문을 넣는다 */
@@ -67,6 +72,7 @@ class MessageAssembler {
                 : messageRepository.findByIdIn(replyIds).stream()
                         .collect(Collectors.toMap(Message::getId, Function.identity()));
         Map<Long, List<ReactionResponse>> reactions = reactionsOf(messages.stream().map(Message::getId).toList());
+        Map<Long, List<MediaResponse>> media = mediaOf(messages);
 
         return messages.stream().map(message -> new MessageResponse(
                 message.getId(), groupId, message.getSeq(), message.getSenderId(),
@@ -75,6 +81,7 @@ class MessageAssembler {
                 replyPreview(message.getReplyToId() == null ? null : replies.get(message.getReplyToId()),
                         visibleAfterSeq),
                 reactions.getOrDefault(message.getId(), List.of()),
+                media.getOrDefault(message.getId(), List.of()),
                 unreadCount(message, members), message.isDeleted(), message.getCreatedAt()))
                 .toList();
     }
@@ -90,6 +97,37 @@ class MessageAssembler {
                 entry -> entry.getValue().entrySet().stream()
                         .map(byEmoji -> new ReactionResponse(byEmoji.getKey(), byEmoji.getValue()))
                         .toList()));
+    }
+
+    /** 사진·동영상 메시지의 미디어를 보낸 순서(payload.mediaIds)대로. 삭제된 메시지는 넣지 않는다 */
+    private Map<Long, List<MediaResponse>> mediaOf(List<Message> messages) {
+        Map<Long, Message> withMedia = messages.stream()
+                .filter(message -> !message.isDeleted()
+                        && (message.getType() == MessageType.IMAGE || message.getType() == MessageType.VIDEO))
+                .collect(Collectors.toMap(Message::getId, Function.identity()));
+        if (withMedia.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<MediaAsset>> byMessage = mediaRepository.findByMessageIdIn(withMedia.keySet()).stream()
+                .collect(Collectors.groupingBy(MediaAsset::getMessageId));
+        return byMessage.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> {
+            List<Long> order = mediaOrder(withMedia.get(entry.getKey()));
+            return entry.getValue().stream()
+                    .sorted(Comparator.comparingInt(asset -> {
+                        int index = order.indexOf(asset.getId());
+                        return index < 0 ? Integer.MAX_VALUE : index;
+                    }))
+                    .map(MediaResponse::of)
+                    .toList();
+        }));
+    }
+
+    private List<Long> mediaOrder(Message message) {
+        Map<String, Object> payload = payloadOf(message);
+        if (payload == null || !(payload.get("mediaIds") instanceof List<?> ids)) {
+            return List.of();
+        }
+        return ids.stream().map(id -> ((Number) id).longValue()).toList();
     }
 
     private static int unreadCount(Message message, List<GroupMember> members) {

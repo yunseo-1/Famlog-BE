@@ -1,0 +1,6 @@
+# 워커 실행 의존성 (버전 고정). 바꾸면 Docker 이미지를 다시 빌드한다
+redis==8.1.0
+boto3==1.43.123
+pillow==13.0.0
+pillow-heif==1.8.1
+pydantic==2.14.2

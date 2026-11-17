@@ -38,6 +38,11 @@ dependencies {
     implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.22.0'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0'
+    // S3 Presigned URL·객체 확인 (로컬 SeaweedFS, 운영 S3). 동기 클라이언트만 쓰므로 Netty 비동기 클라이언트는 뺀다
+    implementation platform('software.amazon.awssdk:bom:2.57.8')
+    implementation('software.amazon.awssdk:s3') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
     runtimeOnly 'org.postgresql:postgresql'
 
     compileOnly 'org.projectlombok:lombok'

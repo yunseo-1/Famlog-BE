@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.famlog.chat.domain.MessageType;
 import com.famlog.chat.domain.ReactionEmoji;
+import com.famlog.media.dto.MediaDtos.MediaResponse;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -26,12 +27,26 @@ public final class ChatDtos {
 
     // --- 요청 ---
 
-    /** STOMP SEND /pub/groups/{groupId}/messages */
+    /**
+     * STOMP SEND /pub/groups/{groupId}/messages.
+     * <ul>
+     * <li>TEXT(기본): body 필수</li>
+     * <li>IMAGE: mediaIds 사진 1~30개 (한 묶음), body 없음</li>
+     * <li>VIDEO: mediaIds 동영상 1개, body 없음</li>
+     * </ul>
+     * 미디어는 내가 이 그룹에 올리고 complete 까지 끝낸 것, 아직 다른 메시지에 붙지 않은 것이어야 한다.
+     */
     public record SendMessageRequest(
             @Schema(description = "앱이 만든 UUID. 재전송해도 같은 값을 보내면 한 번만 저장된다")
             @NotBlank String clientMessageId,
-            @NotBlank @Size(max = MAX_BODY_LENGTH) String body,
+            @Schema(description = "TEXT(기본)·IMAGE·VIDEO") MessageType type,
+            @Size(max = MAX_BODY_LENGTH) String body,
+            @Schema(description = "IMAGE·VIDEO: 보낼 미디어 id (보이는 순서대로)") List<Long> mediaIds,
             @Schema(description = "답장할 메시지 id") Long replyToId) {
+
+        public MessageType typeOrText() {
+            return type == null ? MessageType.TEXT : type;
+        }
     }
 
     /** PUT /groups/{groupId}/read, STOMP SEND /pub/groups/{groupId}/read */
@@ -50,10 +65,13 @@ public final class ChatDtos {
      * @param body        삭제된 메시지는 null
      * @param payload     종류별 추가 정보. 시스템 메시지: {kind: MEMBER_JOINED|MEMBER_LEFT|MEMBER_KICKED, userId}
      * @param unreadCount 아직 안 읽은 구성원 수 (보낸 사람 제외, 시스템 메시지는 0)
+     * @param media       IMAGE·VIDEO 메시지의 사진·동영상 (보낸 순서). 처리 중이면 status=UPLOADED,
+     *                    끝나면 그룹 이벤트 media.updated 가 온다. 삭제된 메시지는 빈 목록
      */
     public record MessageResponse(long id, long groupId, long seq, Long senderId, String clientMessageId,
             MessageType type, String body, Map<String, Object> payload, ReplyPreview replyTo,
-            List<ReactionResponse> reactions, int unreadCount, boolean deleted, Instant sentAt) {
+            List<ReactionResponse> reactions, List<MediaResponse> media, int unreadCount, boolean deleted,
+            Instant sentAt) {
     }
 
     public record ReplyPreview(long id, long seq, Long senderId, MessageType type, String body, boolean deleted) {
@@ -83,7 +101,7 @@ public final class ChatDtos {
     // --- 실시간 이벤트 ---
 
     /**
-     * /sub/groups/{groupId}: message.created, message.deleted, read.updated, reaction.updated
+     * /sub/groups/{groupId}: message.created, message.deleted, read.updated, reaction.updated, media.updated
      * /user/queue/events: message.created(재전송 확인), error, session.revoked
      */
     public record ChatEvent(String type, Object data) {

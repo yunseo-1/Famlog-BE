@@ -1,4 +1,4 @@
-# PR마다, main 반영 시 서버 테스트 실행 (사양서 13.2 CI/CD, 20.5 S2)
+# PR마다, main 반영 시 서버·워커 테스트 실행 (사양서 13.2 CI/CD, 20.5 S2)
 # Testcontainers가 ubuntu 러너의 Docker로 infra/postgres 이미지를 빌드해 쓴다.
 name: backend-test
 
@@ -38,3 +38,16 @@ jobs:
           name: test-reports
           path: build/reports/tests/test
           retention-days: 7
+
+  # 워커 테스트 (사양서 15장 pytest): 실행 이미지와 같은 Python·FFmpeg 로 돌린다
+  worker-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build worker test image
+        run: docker build --target test -t famlog-worker-test worker
+
+      - name: Test
+        run: docker run --rm famlog-worker-test

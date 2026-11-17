@@ -3,6 +3,8 @@ package com.famlog.chat.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,6 +22,7 @@ import com.famlog.chat.dto.ChatDtos.MessageResponse;
 import com.famlog.chat.dto.ChatDtos.ReactionsResponse;
 import com.famlog.chat.dto.ChatDtos.ReadResponse;
 import com.famlog.chat.dto.ChatDtos.ReadUpdated;
+import com.famlog.chat.dto.ChatDtos.SendMessageRequest;
 import com.famlog.chat.relay.ChatRelay;
 import com.famlog.chat.repository.ChatRoomRepository;
 import com.famlog.chat.repository.MessageReactionRepository;
@@ -31,14 +34,19 @@ import com.famlog.common.ratelimit.RateLimiter;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.repository.GroupMemberRepository;
 import com.famlog.group.service.GroupAccessChecker;
+import com.famlog.media.domain.MediaAsset;
+import com.famlog.media.domain.MediaType;
+import com.famlog.media.repository.MediaAssetRepository;
+import com.famlog.media.service.MediaProperties;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 채팅 쓰기 (사양서 4.2 CHAT-02·04·06).
  * <ul>
- * <li>전송: 방 행을 잠그고 seq를 매긴다 → 같은 방 안에서 겹침·빠짐 없이 순서가 정해진다.
+ * <li>전송: TEXT·IMAGE(사진 묶음)·VIDEO. 방 행을 잠그고 seq를 매긴다 → 같은 방 안에서 겹침·빠짐 없이 순서가 정해진다.
  * 같은 사람이 같은 clientMessageId로 다시 보내면 저장된 메시지를 돌려준다 (중복 저장 없음)</li>
  * <li>실시간 이벤트는 커밋 뒤 ChatRelay로 모든 서버에 보낸다</li>
  * <li>메시지 id만 있는 API(/messages/{id})는 다른 그룹이거나 입장 전 메시지면 404 (존재 여부 숨김, 사양서 9.3)</li>
@@ -59,6 +67,9 @@ public class ChatService {
     private final ChatRelay relay;
     private final RateLimiter rateLimiter;
     private final ChatProperties properties;
+    private final MediaAssetRepository mediaRepository;
+    private final MediaProperties mediaProperties;
+    private final JsonMapper jsonMapper;
     private final Clock clock;
 
     /** @param duplicate 이미 저장된 메시지를 다시 보낸 경우 (그룹에 다시 알리지 않는다) */
@@ -68,12 +79,12 @@ public class ChatService {
     // --- CHAT-02 전송 ---
 
     @Transactional
-    public SendResult send(long groupId, long userId, String clientMessageId, String body, Long replyToId) {
+    public SendResult send(long groupId, long userId, SendMessageRequest request) {
         accessChecker.requireMember(groupId, userId);
-        UUID clientId = parseClientMessageId(clientMessageId);
-        if (body == null || body.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "메시지를 입력해 주세요.");
-        }
+        UUID clientId = parseClientMessageId(request.clientMessageId());
+        MessageType type = request.typeOrText();
+        List<Long> mediaIds = request.mediaIds() == null ? List.of() : request.mediaIds();
+        validateShape(type, request.body(), mediaIds);
         Optional<SendResult> resent = findResent(groupId, userId, clientId);
         if (resent.isPresent()) {
             return resent.get();
@@ -89,10 +100,15 @@ public class ChatService {
         }
         GroupMember me = memberRepository.findActiveForUpdate(groupId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_MEMBER));
-        requireReplyTarget(room, me, replyToId);
+        requireReplyTarget(room, me, request.replyToId());
+        List<MediaAsset> media = type == MessageType.TEXT ? List.of() : attachableMedia(groupId, userId, type, mediaIds);
 
         long seq = room.allocateSeq();
-        Message message = messageRepository.save(Message.text(room.getId(), seq, userId, clientId, body, replyToId));
+        Message message = messageRepository.save(type == MessageType.TEXT
+                ? Message.text(room.getId(), seq, userId, clientId, request.body(), request.replyToId())
+                : Message.media(room.getId(), seq, userId, clientId, type,
+                        jsonMapper.writeValueAsString(Map.of("mediaIds", mediaIds)), request.replyToId()));
+        media.forEach(asset -> asset.attachTo(message.getId()));
         long readBefore = me.markReadUpTo(seq);
         messageRepository.flush();
 
@@ -103,6 +119,48 @@ public class ChatService {
             relay.toGroup(groupId, ChatEvent.READ_UPDATED, new ReadUpdated(groupId, userId, readBefore, seq));
         }
         return new SendResult(response, false);
+    }
+
+    /** TEXT는 본문, IMAGE는 사진 1~30개, VIDEO는 동영상 1개 */
+    private void validateShape(MessageType type, String body, List<Long> mediaIds) {
+        switch (type) {
+            case TEXT -> {
+                if (body == null || body.isBlank()) {
+                    throw new BusinessException(ErrorCode.VALIDATION_FAILED, "메시지를 입력해 주세요.");
+                }
+                if (!mediaIds.isEmpty()) {
+                    throw new BusinessException(ErrorCode.VALIDATION_FAILED, "글 메시지에는 사진을 붙일 수 없어요.");
+                }
+            }
+            case IMAGE, VIDEO -> {
+                int max = type == MessageType.IMAGE ? mediaProperties.maxItems() : 1;
+                if (mediaIds.isEmpty() || mediaIds.size() > max || mediaIds.stream().anyMatch(Objects::isNull)
+                        || mediaIds.stream().distinct().count() != mediaIds.size()) {
+                    throw new BusinessException(ErrorCode.VALIDATION_FAILED, type == MessageType.IMAGE
+                            ? "사진은 한 번에 " + max + "장까지 보낼 수 있어요." : "동영상은 하나씩 보내 주세요.");
+                }
+                if (body != null && !body.isBlank()) {
+                    throw new BusinessException(ErrorCode.VALIDATION_FAILED, "사진·동영상에는 글을 함께 보낼 수 없어요.");
+                }
+            }
+            default -> throw new BusinessException(ErrorCode.VALIDATION_FAILED, "보낼 수 없는 메시지 종류예요.");
+        }
+    }
+
+    /**
+     * 메시지에 붙일 미디어를 잠근다: 내가 이 그룹에 올렸고, 업로드 확인이 끝났고(UPLOADED·READY), 아직 아무 메시지에도 안 붙은 것.
+     * 워커 결과 반영도 같은 행을 잠그므로 둘 중 나중 쪽이 앞의 변경을 본다 (media.updated 누락 없음)
+     */
+    private List<MediaAsset> attachableMedia(long groupId, long userId, MessageType type, List<Long> mediaIds) {
+        MediaType expected = type == MessageType.IMAGE ? MediaType.IMAGE : MediaType.VIDEO;
+        List<MediaAsset> media = mediaRepository.findAllByIdForUpdate(mediaIds);
+        boolean valid = media.size() == mediaIds.size() && media.stream().allMatch(asset ->
+                asset.getGroupId() == groupId && asset.getUploaderId() == userId && asset.getMessageId() == null
+                        && asset.getMediaType() == expected && asset.getStatus().isSendable());
+        if (!valid) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "보낼 수 없는 사진·동영상이 있어요. 다시 올려 주세요.");
+        }
+        return media;
     }
 
     private Optional<SendResult> findResent(long groupId, long userId, UUID clientId) {

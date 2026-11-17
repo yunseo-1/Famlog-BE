@@ -21,6 +21,14 @@ famlog:
       app-id: ${KAKAO_APP_ID:}
     google:
       client-ids: ${GOOGLE_CLIENT_ID:}
+  # 로컬 SeaweedFS. 앱(에뮬레이터)이 올릴 주소는 S3_PUBLIC_ENDPOINT (기본: Mac에서 확인용 localhost)
+  media:
+    s3:
+      endpoint: http://localhost:${S3_PORT:8333}
+      public-endpoint: ${S3_PUBLIC_ENDPOINT:http://localhost:${S3_PORT:8333}}
+      access-key: ${S3_ACCESS_KEY}
+      secret-key: ${S3_SECRET_KEY}
+      bucket: ${S3_BUCKET_MEDIA:famlog-media}
   auth:
     jwt:
       active-kid: ${JWT_ACTIVE_KID}

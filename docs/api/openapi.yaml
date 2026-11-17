@@ -483,6 +483,95 @@ paths:
       summary: 읽음 위치 저장
       tags:
       - chat-controller
+  /api/v1/media/upload-urls:
+    post:
+      description: "한 번에 30개. 사진(jpeg·png·webp·heic) 30MB, 동영상(mp4·mov) 500MB·5분 이\
+        하. URL은 10분 유효, 응답의 headers 를 그대로 넣어 PUT 한다"
+      operationId: uploadUrls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlsRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlsResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 업로드 URL 발급
+      tags:
+      - media-controller
+  /api/v1/media/{mediaId}/complete:
+    post:
+      description: 파일 앞부분으로 실제 형식을 확인한다. 형식이 다르면 400(파일은 지워진다). 다시 불러도 안전하다
+      operationId: complete
+      parameters:
+      - in: path
+        name: mediaId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 업로드 완료
+      tags:
+      - media-controller
+  /api/v1/media/{mediaId}/content:
+    get:
+      description: 10분짜리 저장소 주소로 302. 처리가 끝난(READY) 미디어만. 썸네일은 긴 변 256(S)·720(M)·1440(L)px
+        WebP
+      operationId: content
+      parameters:
+      - in: path
+        name: mediaId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: variant
+        required: false
+        schema:
+          type: string
+          default: THUMB_M
+          enum:
+          - ORIGINAL
+          - THUMB_S
+          - THUMB_M
+          - THUMB_L
+      responses:
+        "200":
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내려받기
+      tags:
+      - media-controller
   /api/v1/messages/{messageId}:
     delete:
       description: "보낸 사람만, 보낸 지 5분 안에. 아니면 403 MESSAGE_NOT_DELETABLE. 그룹에 message.deleted\
@@ -974,6 +1063,42 @@ components:
       required:
       - device
       - providerToken
+    MediaResponse:
+      type: object
+      properties:
+        durationSec:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+        id:
+          type: integer
+          format: int64
+        mediaType:
+          type: string
+          enum:
+          - IMAGE
+          - VIDEO
+        mime:
+          type: string
+        size:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+          - PENDING_UPLOAD
+          - UPLOADED
+          - READY
+          - FAILED
+          - REJECTED
+        takenAt:
+          type: string
+          format: date-time
+        width:
+          type: integer
+          format: int32
     MemberResponse:
       type: object
       properties:
@@ -1028,6 +1153,10 @@ components:
         id:
           type: integer
           format: int64
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaResponse"
         payload:
           type: object
           additionalProperties: {}
@@ -1244,6 +1373,58 @@ components:
           description: "호칭 (큰아들, 막내)"
           maxLength: 20
           minLength: 0
+    UploadItem:
+      type: object
+      properties:
+        mimeType:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+      required:
+      - mimeType
+      - size
+    UploadTarget:
+      type: object
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        mediaId:
+          type: integer
+          format: int64
+        method:
+          type: string
+        uploadUrl:
+          type: string
+    UploadUrlsRequest:
+      type: object
+      properties:
+        groupId:
+          type: integer
+          format: int64
+        items:
+          type: array
+          description: 한 번에 30개까지
+          items:
+            $ref: "#/components/schemas/UploadItem"
+          minItems: 1
+      required:
+      - groupId
+      - items
+    UploadUrlsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadTarget"
     UserResponse:
       type: object
       properties:
