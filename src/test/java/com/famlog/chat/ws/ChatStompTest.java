@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -24,6 +25,7 @@ import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 
 import com.famlog.auth.domain.Platform;
@@ -342,6 +344,32 @@ class ChatStompTest extends ChatIntegrationTest {
 
             String event = next(dadTopic);
             assertThat(read(event, "$.data.body")).isEqualTo("다른 서버에서");
+        }
+    }
+
+    @Test
+    void Redis를_거쳐도_이벤트는_보낸_순서대로_도착한다() throws Exception {
+        int count = 300;
+        try (StompTestClient dadClient = StompTestClient.connect(port, token(dad))) {
+            BlockingQueue<String> dadTopic = dadClient.subscribeGroup(groupId);
+
+            // 여러 서버가 몰아서 보낸 것처럼 한 번에 밀어 넣는다
+            redis.executePipelined((RedisCallback<Object>) connection -> {
+                for (int i = 1; i <= count; i++) {
+                    String envelope = """
+                            {"kind":"TOPIC","destination":"/sub/groups/%d","payload":{"type":"test.order","data":{"n":%d}}}
+                            """.formatted(groupId, i);
+                    connection.publish(ChatRelay.CHANNEL.getBytes(StandardCharsets.UTF_8),
+                            envelope.getBytes(StandardCharsets.UTF_8));
+                }
+                return null;
+            });
+
+            List<Integer> received = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                received.add((Integer) read(next(dadTopic), "$.data.n"));
+            }
+            assertThat(received).isSorted().hasSize(count);
         }
     }
 
