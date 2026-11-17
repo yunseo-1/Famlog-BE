@@ -8,7 +8,7 @@ from PIL import Image
 
 from app.media import Rejected
 from app.media.videos import probe, process_video
-from tests.conftest import LAT, LNG, probe_tags, requires_ffmpeg
+from tests.conftest import LAT, LNG, make_video, probe_tags, requires_ffmpeg
 
 pytestmark = requires_ffmpeg
 
@@ -68,3 +68,33 @@ def test_동영상이_아니면_거부한다(tmp_path):
     with pytest.raises(Rejected) as rejected:
         process_video(fake, tmp_path, "video/mp4", extract_location=False, max_seconds=300)
     assert rejected.value.reason == "NOT_A_VIDEO"
+
+
+def test_mp4에_담을_수_없는_소리는_AAC로_바꾸고_영상은_그대로_둔다(mp4_with_pcm_audio, tmp_path):
+    result = process_video(mp4_with_pcm_audio, tmp_path, "video/mp4", extract_location=False, max_seconds=300)
+
+    codecs = sorted(stream["codec_name"] for stream in probe(result.path)["streams"])
+    assert codecs == ["aac", "h264"]
+    assert (result.width, result.height, result.duration_sec) == (320, 240, 2)
+    assert set(result.thumbnails) == {"THUMB_S", "THUMB_M", "THUMB_L"}
+
+
+def test_소리를_바꿔도_위치와_메타데이터가_지워진다(mp4_with_pcm_audio, tmp_path):
+    assert "location" in probe_tags(mp4_with_pcm_audio)
+
+    result = process_video(mp4_with_pcm_audio, tmp_path, "video/mp4", extract_location=True, max_seconds=300)
+
+    tags = probe_tags(result.path)
+    assert not any("location" in key or "xyz" in key for key in tags)
+    assert "creation_time" not in tags
+    assert b"+37.5665" not in result.path.read_bytes()
+    assert result.location == pytest.approx((LAT, LNG), abs=1e-4)
+
+
+@pytest.mark.parametrize("audio_codec", ["aac", None])
+def test_mp4에_담을_수_없는_영상_코덱이면_UNSUPPORTED_CODEC으로_거부한다(audio_codec, tmp_path):
+    source = make_video(tmp_path / "flv.mp4", "flv", audio_codec, "mov")
+
+    with pytest.raises(Rejected) as rejected:
+        process_video(source, tmp_path, "video/mp4", extract_location=False, max_seconds=300)
+    assert rejected.value.reason == "UNSUPPORTED_CODEC"
