@@ -4,17 +4,25 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
 
+import jakarta.persistence.LockModeType;
+
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
 
     Optional<GroupMember> findByGroupIdAndUserId(Long groupId, Long userId);
 
     List<GroupMember> findByGroupIdAndLeftAtIsNullOrderByJoinedAtAsc(Long groupId);
+
+    /** 읽음 위치를 바꿀 때 (동시에 읽음이 들어와도 앞으로만 움직이게) */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from GroupMember m where m.groupId = :groupId and m.userId = :userId and m.leftAt is null")
+    Optional<GroupMember> findActiveForUpdate(@Param("groupId") Long groupId, @Param("userId") Long userId);
 
     long countByGroupIdAndLeftAtIsNull(Long groupId);
 

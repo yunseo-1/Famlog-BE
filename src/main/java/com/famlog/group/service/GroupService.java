@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.chat.domain.ChatRoom;
+import com.famlog.chat.dto.ChatDtos.ChatSummary;
+import com.famlog.chat.service.MessageQueryService;
 import com.famlog.chat.repository.ChatRoomRepository;
 import com.famlog.common.audit.AuditAction;
 import com.famlog.common.audit.AuditLogger;
@@ -48,6 +50,7 @@ public class GroupService {
     private final GroupMemberRepository memberRepository;
     private final GroupInviteRepository inviteRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final MessageQueryService messageQueryService;
     private final UserRepository userRepository;
     private final GroupAccessChecker accessChecker;
     private final InviteAttemptLimiter inviteAttemptLimiter;
@@ -59,7 +62,7 @@ public class GroupService {
 
     public GroupService(FamilyGroupRepository groupRepository, GroupMemberRepository memberRepository,
             GroupInviteRepository inviteRepository, ChatRoomRepository chatRoomRepository,
-            UserRepository userRepository, GroupAccessChecker accessChecker,
+            MessageQueryService messageQueryService, UserRepository userRepository, GroupAccessChecker accessChecker,
             InviteAttemptLimiter inviteAttemptLimiter, AuditLogger auditLogger, ApplicationEventPublisher events,
             GroupProperties properties, Clock clock) {
         if (properties.calendarPalette() == null || properties.calendarPalette().isEmpty()) {
@@ -69,6 +72,7 @@ public class GroupService {
         this.memberRepository = memberRepository;
         this.inviteRepository = inviteRepository;
         this.chatRoomRepository = chatRoomRepository;
+        this.messageQueryService = messageQueryService;
         this.userRepository = userRepository;
         this.accessChecker = accessChecker;
         this.inviteAttemptLimiter = inviteAttemptLimiter;
@@ -94,14 +98,19 @@ public class GroupService {
         return detail(group.getId(), userId);
     }
 
+    /** 채팅 탭(SCR-10)에서도 쓰므로 그룹별 마지막 메시지·안 읽은 수를 함께 준다 */
     @Transactional(readOnly = true)
     public List<GroupSummaryResponse> myGroups(long userId) {
-        return memberRepository.findMyGroups(userId).stream()
+        List<Object[]> rows = memberRepository.findMyGroups(userId);
+        Map<Long, ChatSummary> chats = messageQueryService.summaries(userId,
+                rows.stream().map(row -> (GroupMember) row[1]).toList());
+        return rows.stream()
                 .map(row -> {
                     FamilyGroup group = (FamilyGroup) row[0];
                     GroupMember member = (GroupMember) row[1];
+                    ChatSummary chat = chats.getOrDefault(group.getId(), new ChatSummary(null, 0));
                     return new GroupSummaryResponse(group.getId(), group.getName(), group.getImageKey(),
-                            (Long) row[2], member.getRole());
+                            (Long) row[2], member.getRole(), chat.lastMessage(), chat.unreadCount());
                 })
                 .toList();
     }

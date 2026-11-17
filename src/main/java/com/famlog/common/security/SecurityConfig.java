@@ -35,6 +35,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/api/v1/auth/**",
             "/api/v1/app/config",
+            // WebSocket 핸드셰이크. 인증은 STOMP CONNECT 프레임의 토큰으로 한다 (StompAuthInterceptor)
+            "/ws",
     };
 
     @Bean

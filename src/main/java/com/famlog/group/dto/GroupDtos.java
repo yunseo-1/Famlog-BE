@@ -3,6 +3,7 @@ package com.famlog.group.dto;
 import java.time.Instant;
 import java.util.List;
 
+import com.famlog.chat.dto.ChatDtos.LastMessage;
 import com.famlog.group.domain.FamilyRole;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
@@ -43,7 +44,12 @@ public final class GroupDtos {
     public record CurrentGroupRequest(@NotNull Long groupId) {
     }
 
-    public record GroupSummaryResponse(long id, String name, String imageKey, long memberCount, GroupRole myRole) {
+    /**
+     * @param lastMessage 채팅 탭에 보일 마지막 메시지 (들어온 뒤 메시지가 없으면 null)
+     * @param unreadCount 안 읽은 메시지 수 (내가 보낸 것·시스템·삭제된 메시지 제외)
+     */
+    public record GroupSummaryResponse(long id, String name, String imageKey, long memberCount, GroupRole myRole,
+            LastMessage lastMessage, long unreadCount) {
     }
 
     /** @param familyRole null 이면 아직 설정 전 → 앱이 SCR-03(내 가족 역할 설정)으로 안내 */
