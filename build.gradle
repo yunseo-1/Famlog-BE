@@ -33,6 +33,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation 'com.bucket4j:bucket4j_jdk17-core:8.22.0'
     implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.22.0'
     implementation 'org.flywaydb:flyway-database-postgresql'

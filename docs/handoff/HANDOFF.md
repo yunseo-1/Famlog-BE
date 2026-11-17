@@ -5,7 +5,7 @@
 - 담당자: 김윤서 (기획·백엔드·안드로이드, 1인 개발)
 - **이 사본은 백엔드 저장소(`Famlog-BE`) 기준이다.** 서버·워커·인프라 진행은 여기 8장에 기록한다.
   Android 진행은 모바일 저장소(`Famlog-moblie`)의 HANDOFF, 사양 원본은 문서 레포(`Famlog`)에 있다.
-- 최종 갱신: 2026-11-17 (S1~S5 완료, API 계약 내보내기)
+- 최종 갱신: 2026-11-17 (S1~S5·S8 완료, API 계약 내보내기)
 
 ---
 
@@ -47,6 +47,13 @@
 | 11/13 | **연령 확인은 가입 단계**(`/auth/{provider}/signup`), 미가입 로그인은 404 `USER_NOT_REGISTERED` | 14세 미만 정보가 서버에 남지 않게 (A안) |
 | 11/14 | 그룹: 에러 코드 `GROUP_LIMIT_EXCEEDED`·`OWNER_TRANSFER_REQUIRED`, 입장 메시지는 S8에서 이벤트로 | 앱 분기용, 메시지 테이블은 S8 |
 | 11/17 | API 계약 `docs/api/openapi.yaml`을 **이 저장소에서 생성·커밋**, 문서 레포 반영은 `scripts/export-openapi.sh` 후 직접 커밋 | CI가 계약과 코드가 같은지 확인 |
+| 11/17 | 채팅 seq는 `chat_rooms.last_seq`를 잠그고 +1 (V4) | 서버가 여러 대여도 방 안에서 겹침·빠짐 없음 |
+| 11/17 | **새 구성원은 들어온 뒤 대화만 본다** (`group_members.join_seq`) | 카카오톡 방식, 개인정보 최소 (사양서 8장) |
+| 11/17 | 안 읽은 수는 서버가 메시지마다 계산, 이후 `read.updated {fromSeq, lastReadSeq}`로 앱이 갱신 | 메시지별 숫자(카카오톡 방식) |
+| 11/17 | 채팅 탭 요약은 `GET /groups/me`에 `lastMessage`·`unreadCount` 추가 | 엔드포인트를 늘리지 않음 |
+| 11/17 | 공감: 한 사람당 1개, 6종 고정(HEART·LIKE·LAUGH·WOW·SAD·PRAY) | 서버는 이름만, 그림은 앱 |
+| 11/17 | 삭제 거부는 403 `MESSAGE_NOT_DELETABLE` | 남의 메시지·5분 경과·시스템 메시지 |
+| 11/17 | 그룹에서 나가거나 세션이 폐기되면 서버가 WebSocket 연결을 끊는다 | 이미 구독한 토픽을 계속 받지 않게 |
 
 ## 3. Figma 상태
 
@@ -97,9 +104,9 @@
 | S3 | 보안 골격 (JWT, Refresh 교체·재사용 감지, GroupAccessChecker, 요청 제한) | ✅ PR #4 |
 | S4 | AUTH-01~03 소셜 로그인·가입·연령 확인·기기 관리 | ✅ PR #5 |
 | S5 | GRP-01~05 가족 그룹·초대·역할·구성원 관리 | ✅ PR #6 |
-| - | API 계약 `docs/api/openapi.yaml` 생성·CI 확인 | ✅ 이번 PR |
-| S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | 다음 |
-| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | |
+| - | API 계약 `docs/api/openapi.yaml` 생성·CI 확인 | ✅ PR #7 |
+| S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ 이번 PR |
+| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | 다음 |
 | S11 | NOTI-01 FCM 푸시 (+ 새 기기 로그인 알림) | |
 | S12 | SCH-01~04, TODO-01 | |
 | S14 | PLC-01~06 | |
@@ -114,10 +121,23 @@
 2. 이 저장소에 함께 커밋한다. 갱신을 잊으면 CI(`OpenApiContractTest`)가 실패한다
 3. 머지 후 `sh scripts/export-openapi.sh <문서 레포 경로>` → 문서 레포에서 커밋·push
 
+### 실시간 채팅 규칙 (S8, 앱 S10 참고)
+
+- 연결: `ws(s)://{서버}/ws` (SockJS 없음), STOMP CONNECT 헤더 `Authorization: Bearer {accessToken}`, 하트비트 10초
+- 보내기: `/pub/groups/{groupId}/messages` `{clientMessageId(UUID), body(≤2000자), replyToId?}`, 읽음: `/pub/groups/{groupId}/read` `{lastReadSeq}`
+- 받기: `/sub/groups/{groupId}` → `{type, data}`: `message.created`·`message.deleted`·`read.updated`·`reaction.updated`
+- 개인: `/user/queue/events` → 실패 `error {code, message, clientMessageId}`, 재전송 확인 `message.created`(이미 저장된 메시지), `session.revoked`
+- 거부(토큰 만료·무효, 다른 그룹 구독·전송): ERROR 프레임 `message` 헤더 = 에러 코드, 서버가 연결을 끊는다.
+  `AUTH_TOKEN_EXPIRED`면 재발급 후 재연결. 그룹에서 나가거나 다른 기기에서 로그아웃돼도 연결이 끊긴다 → 재연결·그룹 목록 새로 고침
+- **앱은 seq 순서로 정렬한다.** 서로 다른 사람의 메시지는 도착 순서가 seq와 다를 수 있다. seq에 빈 곳이 보이거나 재연결하면 `GET /groups/{id}/messages?afterSeq={마지막 seq}`로 채운다
+- 전송 제한 초당 5개/사용자: 오프라인 대기열을 한꺼번에 보내면 `RATE_LIMITED`가 올 수 있다 → 잠시 뒤 같은 clientMessageId로 다시 보낸다
+- 답장 원문이 내가 들어오기 전 메시지면 `replyTo.body`가 null이다 (그룹 이벤트는 구성원 모두가 볼 수 있을 때만 본문을 넣는다. 앱 캐시에 있으면 그걸 쓴다)
+
 ### 다음 단계로 넘긴 것
 
-- S8: `GroupMemberEvents`(입장·퇴장)로 채팅방 시스템 메시지 만들기 → 18.1 GRP-02 "입장 메시지" 완성
-- S11: 새 기기 로그인 알림, 입장·내보내기 푸시
+- S9: 사진·동영상 메시지(IMAGE·VIDEO), 메시지 `payload`에 미디어 정보
+- S11: 새 기기 로그인 알림, 입장·내보내기 푸시, 새 메시지 푸시(`notif_muted`·방해 금지)
+- S12~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
 - S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리, `group_settings`(AI 분석 설정)
 - 모바일 요청 검토: `GET /users/me` (지금은 앱이 로그인 응답의 user를 저장해 씀)
 - 자리 값: 캘린더 팔레트 뒤 8색(디자인 확정 시), 초대 링크 도메인 `famlog.app`(App Links 도메인 확정 시)
@@ -130,6 +150,10 @@
 | 11.2 | 에러 코드 추가: `INTERNAL_ERROR`(500), `METHOD_NOT_ALLOWED`(405), `USER_NOT_REGISTERED`(404), `AGE_RESTRICTED`(403), `GROUP_LIMIT_EXCEEDED`(409), `OWNER_TRANSFER_REQUIRED`(409) |
 | 11.3 | `POST /auth/{provider}/signup` 추가, `/users/me/age-verification` v1.0 미사용, 나가기는 `POST /groups/{id}/leave` |
 | 13.2 | Spring Boot 4.1, 로컬 S3는 SeaweedFS |
+| 10.2 (S8) | `chat_rooms.last_seq`, `group_members.join_seq` 추가, `message_reactions`(message_id, user_id, emoji — PK(message_id, user_id)) |
+| 11.2 (S8) | 에러 코드 `MESSAGE_NOT_DELETABLE`(403) |
+| 11.3 (S8) | `DELETE /messages/{id}/reactions/me` 추가, `GET /groups/me`에 `lastMessage`·`unreadCount`, 메시지 목록 응답 `{items, hasMore}` |
+| 11.4 (S8) | 연결 주소 `/ws`, 이벤트 형식 `{type, data}`, 이벤트 `reaction.updated`·`error`·`session.revoked`, ERROR 프레임 규칙 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -152,4 +176,5 @@
 | 2026-11-13 | S3 | JWT ES256·kid, Refresh 교체·재사용 감지(V2), 즉시 세션 폐기, 그룹 경로 인가, 요청 제한 | feat(S3) `f08457c` |
 | 2026-11-13 | AUTH-01~03 | 카카오·Google 로그인·가입, 만 14세 확인, 기기 목록·원격 로그아웃 | feat(AUTH-01~03) `b6de551` |
 | 2026-11-14 | GRP-01~05 | 그룹 생성·초대(잠금)·전환·가족 역할·권한·위임·내보내기·나가기, 감사 로그(V3) | feat(GRP-01~05) `d7660b5` |
-| 2026-11-17 | - | API 계약 `docs/api/openapi.yaml` 생성(`updateOpenApi`)·CI 확인, 문서 레포 내보내기 스크립트, HANDOFF 갱신 | chore(api) |
+| 2026-11-17 | - | API 계약 `docs/api/openapi.yaml` 생성(`updateOpenApi`)·CI 확인, 문서 레포 내보내기 스크립트, HANDOFF 갱신 | chore(api) `3310f85` |
+| 2026-11-17 | CHAT-01~04·06 | STOMP 실시간 채팅(JWT CONNECT, 구독·전송마다 구성원 확인), 방별 seq·clientMessageId 멱등(V4), Redis Pub/Sub 중계, 내역 페이징, 읽음·안 읽은 수, 답장·공감·5분 삭제, 입장·퇴장 시스템 메시지, 나감·로그아웃 시 연결 끊기 | feat(CHAT) |

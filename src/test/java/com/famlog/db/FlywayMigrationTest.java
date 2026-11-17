@@ -145,6 +145,41 @@ class FlywayMigrationTest extends IntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void V4_방_안에서_seq는_겹칠_수_없고_시스템_메시지는_여러_개_둘_수_있다() {
+        long sender = insertUser("엄마");
+        long roomId = insertRoom(sender);
+        jdbcTemplate.update(MESSAGE_INSERT, roomId, 1, sender, "00000000-0000-0000-0000-000000000001");
+        // 시스템 메시지(보낸 사람·clientMessageId 없음)는 여러 개 둘 수 있다
+        jdbcTemplate.update("INSERT INTO messages (room_id, seq, type, body) VALUES (?, 2, 'SYSTEM', '입장')", roomId);
+        jdbcTemplate.update("INSERT INTO messages (room_id, seq, type, body) VALUES (?, 3, 'SYSTEM', '입장')", roomId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(MESSAGE_INSERT, roomId, 1, sender,
+                "00000000-0000-0000-0000-000000000002"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V4_같은_사람의_clientMessageId는_두_번_저장할_수_없다() {
+        long sender = insertUser("엄마");
+        long roomId = insertRoom(sender);
+        jdbcTemplate.update(MESSAGE_INSERT, roomId, 1, sender, "00000000-0000-0000-0000-000000000001");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(MESSAGE_INSERT, roomId, 2, sender,
+                "00000000-0000-0000-0000-000000000001"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
+            + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
+
+    private long insertRoom(long owner) {
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, owner);
+        return jdbcTemplate.queryForObject("INSERT INTO chat_rooms (group_id) VALUES (?) RETURNING id", Long.class,
+                groupId);
+    }
+
     private long insertUser(String nickname) {
         return jdbcTemplate.queryForObject("INSERT INTO users (nickname) VALUES (?) RETURNING id", Long.class, nickname);
     }

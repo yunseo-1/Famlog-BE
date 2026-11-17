@@ -17,6 +17,7 @@ public enum ErrorCode {
     AUTH_INVALID(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요."),
     GROUP_NOT_MEMBER(HttpStatus.FORBIDDEN, "이 가족 그룹의 구성원이 아니에요."),
     GROUP_ROLE_REQUIRED(HttpStatus.FORBIDDEN, "그룹 관리자만 할 수 있어요."),
+    MESSAGE_NOT_DELETABLE(HttpStatus.FORBIDDEN, "내가 보낸 메시지만 보낸 지 5분 안에 지울 수 있어요."),
     AGE_RESTRICTED(HttpStatus.FORBIDDEN, "만 14세 이상만 가입할 수 있어요. 보호자와 함께 사용하는 기능은 곧 제공돼요."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "찾을 수 없어요."),
     USER_NOT_REGISTERED(HttpStatus.NOT_FOUND, "처음 오셨네요. 가입을 진행해 주세요."),

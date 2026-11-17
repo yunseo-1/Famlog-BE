@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,7 @@ public class SessionTokenService {
     private final SessionRevocationStore revocationStore;
     private final AccessTokenIssuer accessTokenIssuer;
     private final AuthProperties properties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     @Transactional
@@ -146,6 +148,9 @@ public class SessionTokenService {
         sessions.forEach(session -> session.revoke(now));
         refreshTokenRepository.revokeActiveBySessionIds(sessions.stream().map(UserSession::getId).toList());
         sessions.forEach(session -> revocationStore.markRevoked(session.getId()));
+        // 열려 있는 실시간 연결(WebSocket)도 끊는다
+        events.publishEvent(new SessionsRevoked(sessions.get(0).getUserId(),
+                sessions.stream().map(UserSession::getId).toList()));
     }
 
     private TokenPair issueTokens(UserSession session, Instant refreshExpiresAt) {

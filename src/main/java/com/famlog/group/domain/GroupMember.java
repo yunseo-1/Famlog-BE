@@ -56,6 +56,10 @@ public class GroupMember extends BaseTimeEntity {
     @Column(name = "last_read_seq", nullable = false)
     private long lastReadSeq;
 
+    /** 들어온 시점의 채팅 seq. 이보다 큰 seq의 메시지만 볼 수 있다 */
+    @Column(name = "join_seq", nullable = false)
+    private long joinSeq;
+
     @Column(name = "notif_muted", nullable = false)
     private boolean notifMuted;
 
@@ -88,6 +92,26 @@ public class GroupMember extends BaseTimeEntity {
         if (leftAt == null) {
             leftAt = now;
         }
+    }
+
+    /** 입장 시 채팅 읽기 범위를 정한다: joinSeq 이후 메시지만 보이고, 입장 메시지(readSeq)까지는 읽은 것으로 본다 */
+    public void startChatFrom(long joinSeq, long readSeq) {
+        this.joinSeq = joinSeq;
+        this.lastReadSeq = readSeq;
+    }
+
+    /**
+     * 읽음 위치를 앞으로만 옮긴다.
+     *
+     * @return 옮겼으면 이전 값, 이미 그 이상 읽었으면 -1
+     */
+    public long markReadUpTo(long seq) {
+        if (seq <= lastReadSeq) {
+            return -1;
+        }
+        long before = lastReadSeq;
+        lastReadSeq = seq;
+        return before;
     }
 
     public void changeRole(GroupRole role) {

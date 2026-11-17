@@ -74,6 +74,12 @@ famlog:
     # 구성원 캘린더 색 12색. 앞 4색은 디자인 토큰 memberColorSamples, 나머지는 임시 제안 → 디자인 확정 시 교체
     calendar-palette: ["#14A3B8", "#E5568D", "#E8A33C", "#7BB33A", "#4C8DF0", "#A66BD3",
                        "#D9534F", "#8D6E63", "#607D8B", "#F2C94C", "#5C6BC0", "#FF8A65"]
+  # 채팅 (사양서 4.2 CHAT-02~04, 9.6 메시지 초당 5개/사용자)
+  chat:
+    send-rate-capacity: 5
+    send-rate-period: 1s
+    default-page-size: 50
+    max-page-size: 100
   # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
   consent:
     terms-version: "1.0"
