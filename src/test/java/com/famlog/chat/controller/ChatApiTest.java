@@ -2,6 +2,7 @@ package com.famlog.chat.controller;
 
 import static com.famlog.support.GroupApi.addMember;
 import static com.famlog.support.GroupApi.createGroup;
+import static com.famlog.support.GroupApi.setFamilyTitle;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
@@ -79,6 +80,7 @@ class ChatApiTest extends ChatIntegrationTest {
 
     @Test
     void 나가거나_내보내지면_퇴장_메시지가_남는다() throws Exception {
+        setFamilyTitle(mockMvc, groupId, son, "큰아들");
         mockMvc.perform(post("/api/v1/groups/{g}/leave", groupId).with(asUser(son)))
                 .andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/v1/groups/{g}/members/{u}", groupId, dad).with(asUser(mom)))
@@ -86,7 +88,7 @@ class ChatApiTest extends ChatIntegrationTest {
 
         messages(mom, "?afterSeq=2")
                 .andExpect(jsonPath("$.items[*].payload.kind", contains("MEMBER_LEFT", "MEMBER_KICKED")))
-                .andExpect(jsonPath("$.items[*].body", contains("테스트님이 나갔어요.", "테스트님이 나갔어요.")));
+                .andExpect(jsonPath("$.items[*].body", contains("큰아들님이 나갔어요.", "테스트님이 나갔어요.")));
     }
 
     // --- CHAT-03 내역 ---

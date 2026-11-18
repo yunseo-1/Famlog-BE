@@ -50,6 +50,13 @@ public final class GroupApi {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"%s\"}".formatted(role)));
     }
 
+    /** 내 그룹 호칭 정하기 (GRP-04) */
+    public static void setFamilyTitle(MockMvc mockMvc, long groupId, long userId, String title) throws Exception {
+        mockMvc.perform(patch("/api/v1/groups/{g}/members/me", groupId).with(as(userId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"familyTitle\":\"%s\"}".formatted(title)))
+                .andExpect(status().isOk());
+    }
+
     static RequestPostProcessor as(long userId) {
         return jwt().jwt(token -> token.subject(Long.toString(userId)).claim(FamlogJwtClaims.SESSION_ID, "1"));
     }

@@ -139,6 +139,7 @@ class TodoApiTest extends PushIntegrationTest {
 
     @Test
     void 알리기로_하고_완료하면_채팅방에_한_줄이_남고_다른_가족에게_푸시가_간다() throws Exception {
+        GroupApi.setFamilyTitle(mockMvc, family.groupId(), family.son(), "막내");
         String momToken = deviceOf(family.mom());
         String sonToken = deviceOf(family.son());
         long id = create(family.mom(), "{\"title\":\"우유 사 오기\"}");
@@ -148,13 +149,13 @@ class TodoApiTest extends PushIntegrationTest {
 
         assertThat(roomLastSeq(family.groupId())).isEqualTo(before + 1);
         assertThat(lastMessage("type")).isEqualTo("SYSTEM");
-        assertThat(lastMessage("body")).isEqualTo("테스트님이 '우유 사 오기' 할 일을 완료했어요.");
+        assertThat(lastMessage("body")).isEqualTo("막내님이 '우유 사 오기' 할 일을 완료했어요.");
         assertThat(lastMessage("payload").replace(" ", "")).contains("\"kind\":\"TODO_DONE\"", "\"todoId\":" + id,
                 "\"userId\":" + family.son());
         PushMessage push = pushSender.await(momToken, data -> "CHAT_MESSAGE".equals(data.get("type"))
                 && Long.toString(before + 1).equals(data.get("seq")));
         assertThat(push.data()).containsEntry("messageType", "SYSTEM")
-                .containsEntry("body", "테스트님이 '우유 사 오기' 할 일을 완료했어요.");
+                .containsEntry("body", "막내님이 '우유 사 오기' 할 일을 완료했어요.");
         assertThat(pushSender.batchOf(push)).extracting(PushMessage::token).doesNotContain(sonToken);
 
         // 이미 완료한 일을 다시 완료하거나, 알리지 않고 완료하면 남기지 않는다
@@ -162,6 +163,11 @@ class TodoApiTest extends PushIntegrationTest {
         long quiet = create(family.mom(), "{\"title\":\"조용히\"}");
         update(quiet, family.son(), "{\"version\":0,\"done\":true}").andExpect(status().isOk());
         assertThat(roomLastSeq(family.groupId())).isEqualTo(before + 1);
+
+        // 호칭이 없으면 닉네임
+        update(quiet, family.dad(), "{\"version\":1,\"done\":false}").andExpect(status().isOk());
+        update(quiet, family.dad(), "{\"version\":2,\"done\":true,\"announce\":true}").andExpect(status().isOk());
+        assertThat(lastMessage("body")).isEqualTo("테스트님이 '조용히' 할 일을 완료했어요.");
     }
 
     @Test

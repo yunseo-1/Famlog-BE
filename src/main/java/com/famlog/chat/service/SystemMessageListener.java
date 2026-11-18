@@ -32,6 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>나감·내보내짐: 그 사람의 실시간 연결을 끊는다 (이미 구독한 그룹 토픽을 더 받지 못하게)</li>
  * <li>할 일 완료(알리기로 한 경우, 사양서 4.3 TODO-01): "엄마님이 '우유 사 오기' 할 일을 완료했어요."</li>
  * </ul>
+ * 이름은 그룹 호칭이 있으면 호칭, 없으면 닉네임이다.
  */
 @Component
 @RequiredArgsConstructor
@@ -73,7 +74,7 @@ class SystemMessageListener {
     @EventListener
     void onTodoCompleted(TodoCompleted event) {
         ChatRoom room = lockRoom(event.groupId());
-        Message message = post(room, event.userId(), "님이 '" + event.title() + "' 할 일을 완료했어요.",
+        Message message = post(room, event.groupId(), event.userId(), "님이 '" + event.title() + "' 할 일을 완료했어요.",
                 Map.of("kind", TODO_DONE, "userId", event.userId(), "todoId", event.todoId()));
         broadcast(event.groupId(), message);
     }
@@ -83,14 +84,21 @@ class SystemMessageListener {
     }
 
     private Message post(ChatRoom room, long groupId, long userId, String kind, String text) {
-        return post(room, userId, text, Map.of("kind", kind, "userId", userId));
+        return post(room, groupId, userId, text, Map.of("kind", kind, "userId", userId));
     }
 
     /** payload 의 userId 는 이 일의 당사자 (푸시에서 뺀다) */
-    private Message post(ChatRoom room, long userId, String text, Map<String, Object> payload) {
-        String nickname = userRepository.findById(userId).map(User::getNickname).orElse("가족");
-        return messageRepository.save(Message.system(room.getId(), room.allocateSeq(), nickname + text,
+    private Message post(ChatRoom room, long groupId, long userId, String text, Map<String, Object> payload) {
+        return messageRepository.save(Message.system(room.getId(), room.allocateSeq(), nameOf(groupId, userId) + text,
                 jsonMapper.writeValueAsString(payload)));
+    }
+
+    /** 채팅 푸시의 보낸 사람 이름과 같은 규칙: 이 그룹의 호칭이 있으면 호칭, 없으면 닉네임 (나간 뒤에도 호칭은 남아 있다) */
+    private String nameOf(long groupId, long userId) {
+        return memberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(GroupMember::getFamilyTitle)
+                .or(() -> userRepository.findById(userId).map(User::getNickname))
+                .orElse("가족");
     }
 
     private void broadcast(long groupId, Message message) {
