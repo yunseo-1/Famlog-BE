@@ -180,6 +180,56 @@ class FlywayMigrationTest extends IntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void V7_일정은_끝이_시작보다_앞일_수_없고_리마인드_기본값은_전날_20시와_1시간_전이다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+        String insert = "INSERT INTO schedules (group_id, title, starts_at, ends_at, created_by) "
+                + "VALUES (?, '병원', ?::timestamptz, ?::timestamptz, ?) RETURNING id";
+
+        long id = jdbcTemplate.queryForObject(insert, Long.class, groupId, "2026-11-21T10:00:00+09:00",
+                "2026-11-21T10:00:00+09:00", userId);
+        assertThat(jdbcTemplate.queryForObject("SELECT array_to_string(reminders, ',') FROM schedules WHERE id = ?",
+                String.class, id)).isEqualTo("PREV_DAY_20,HOUR_1");
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(insert, Long.class, groupId,
+                "2026-11-21T10:00:00+09:00", "2026-11-21T09:59:00+09:00", userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V7_할_일의_완료_시각과_완료한_사람은_함께_있거나_함께_없다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO todos (group_id, title, done_at, created_by) VALUES (?, '우유', now(), ?)", groupId,
+                userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V7_정의되지_않은_할_일_종류는_저장되지_않는다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO todos (group_id, kind, title, created_by) VALUES (?, 'MEMO', '우유', ?)", groupId, userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V7_공휴일_초기_데이터가_있고_같은_날_같은_이름은_두_번_넣을_수_없다() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM holidays WHERE date BETWEEN '2026-01-01' AND '2027-12-31'", Long.class))
+                .isEqualTo(40);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO holidays (date, name) VALUES ('2026-01-01', '신정')"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
             + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
 

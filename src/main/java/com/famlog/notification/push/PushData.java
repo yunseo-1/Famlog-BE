@@ -22,13 +22,19 @@ public final class PushData {
     public static final String SESSION_ID = "sessionId";
     public static final String DEVICE_NAME = "deviceName";
     public static final String PLATFORM = "platform";
+    public static final String SCHEDULE_ID = "scheduleId";
+    public static final String TITLE = "title";
+    public static final String STARTS_AT = "startsAt";
+    public static final String ALL_DAY = "allDay";
+    public static final String REMINDER = "reminder";
 
     /** type 값 */
     public static final String CHAT_MESSAGE = "CHAT_MESSAGE";
     public static final String MEMBER_REMOVED = "MEMBER_REMOVED";
     public static final String NEW_DEVICE_LOGIN = "NEW_DEVICE_LOGIN";
+    public static final String SCHEDULE_REMINDER = "SCHEDULE_REMINDER";
 
-    /** channel 값 (앱 알림 채널 4개. SCHEDULE·AI는 S12~에서 쓴다) */
+    /** channel 값 (앱 알림 채널 4개. AI는 S16~에서 쓴다) */
     public static final String CHANNEL_CHAT = "CHAT";
     public static final String CHANNEL_SCHEDULE = "SCHEDULE";
     public static final String CHANNEL_AI = "AI";

@@ -23,8 +23,9 @@ class GroupPathAccessFilterTest extends IntegrationTest {
         long groupId = createGroup(mockMvc, owner, "우리 가족");
 
         mockMvc.perform(get("/api/v1/groups/{groupId}", groupId).with(asUser(owner))).andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/groups/{groupId}/schedules", groupId).with(asUser(owner)))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/groups/{groupId}/schedules", groupId).with(asUser(owner))
+                        .param("from", "2026-11-01").param("to", "2026-11-30"))
+                .andExpect(status().isOk());
     }
 
     @Test

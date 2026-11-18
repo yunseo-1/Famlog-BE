@@ -29,6 +29,7 @@ import com.famlog.notification.domain.NotificationSettings;
 import com.famlog.notification.push.PushData;
 import com.famlog.notification.push.PushProperties;
 import com.famlog.notification.repository.NotificationSettingsRepository;
+import com.famlog.schedule.event.ScheduleReminderDue;
 import com.famlog.user.domain.User;
 import com.famlog.user.repository.UserRepository;
 
@@ -40,7 +41,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 받을 사람별 푸시 data 를 만든다 (사양서 4.2 NOTI-01, 4.1 SET-02). 키 목록은 {@link PushData}.
  * <ul>
  * <li>새 메시지: 보낸 사람(시스템 메시지는 그 대상), 나간 구성원, 그룹 알림을 끈 구성원, 메시지보다 늦게 들어온 구성원은 뺀다</li>
- * <li>미리보기를 숨긴 사람에게는 body 를 넣지 않는다. 방해 금지 시간이면 silent=true</li>
+ * <li>일정 리마인드: 참여 구성원 중 그룹에 남아 있고 그룹 알림을 끄지 않은 사람</li>
+ * <li>미리보기를 숨긴 사람에게는 body·일정 제목을 넣지 않는다. 방해 금지 시간이면 silent=true</li>
  * </ul>
  */
 @Component
@@ -134,6 +136,43 @@ class PushComposer {
         data.put(PushData.SILENT, Boolean.toString(settingsOf(List.of(event.userId())).get(event.userId())
                 .isQuietAt(seoulNow())));
         return Map.of(event.userId(), data);
+    }
+
+    /** 일정 리마인드 (SCH-03): 참여 구성원 중 그룹에 남아 있고 그룹 알림을 끄지 않은 사람에게 */
+    @Transactional(readOnly = true)
+    public Map<Long, Map<String, String>> scheduleReminder(ScheduleReminderDue event) {
+        FamilyGroup group = groupRepository.findById(event.groupId()).filter(FamilyGroup::isActive).orElse(null);
+        if (group == null) {
+            return Map.of();
+        }
+        List<Long> recipients = memberRepository.findByGroupIdAndLeftAtIsNullOrderByJoinedAtAsc(group.getId()).stream()
+                .filter(member -> event.participantIds().contains(member.getUserId()))
+                .filter(member -> !member.isNotifMuted())
+                .map(GroupMember::getUserId)
+                .toList();
+        if (recipients.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> common = base(PushData.SCHEDULE_REMINDER, PushData.CHANNEL_SCHEDULE, group,
+                Instant.now(clock));
+        common.put(PushData.SCHEDULE_ID, Long.toString(event.scheduleId()));
+        common.put(PushData.STARTS_AT, sentAt(event.occurrenceStart()));
+        common.put(PushData.ALL_DAY, Boolean.toString(event.allDay()));
+        common.put(PushData.REMINDER, event.reminder().name());
+
+        Map<Long, NotificationSettings> settings = settingsOf(recipients);
+        LocalTime now = seoulNow();
+        Map<Long, Map<String, String>> dataByUser = new HashMap<>();
+        for (Long userId : recipients) {
+            NotificationSettings mine = settings.get(userId);
+            Map<String, String> data = new HashMap<>(common);
+            data.put(PushData.SILENT, Boolean.toString(mine.isQuietAt(now)));
+            if (!mine.isPreviewHidden()) {
+                data.put(PushData.TITLE, truncate(event.title()));
+            }
+            dataByUser.put(userId, data);
+        }
+        return dataByUser;
     }
 
     private Map<String, String> base(String type, String channel, FamilyGroup group, Instant at) {
