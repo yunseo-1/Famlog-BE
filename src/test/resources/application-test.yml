@@ -6,3 +6,8 @@ springdoc:
 logging:
   level:
     com.famlog: DEBUG
+
+# 리마인드 스케줄러는 테스트가 시각을 정해 직접 부른다 (ReminderService.sendDue)
+famlog:
+  schedule:
+    reminder-enabled: false

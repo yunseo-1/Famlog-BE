@@ -5,7 +5,7 @@
 - 담당자: 김윤서 (기획·백엔드·안드로이드, 1인 개발)
 - **이 사본은 백엔드 저장소(`Famlog-BE`) 기준이다.** 서버·워커·인프라 진행은 여기 8장에 기록한다.
   Android 진행은 모바일 저장소(`Famlog-moblie`)의 HANDOFF, 사양 원본은 문서 레포(`Famlog`)에 있다.
-- 최종 갱신: 2026-11-17 (S1~S5·S8·S9 완료)
+- 최종 갱신: 2026-11-18 (S1~S5·S8·S9·S11·S12 완료)
 
 ---
 
@@ -66,6 +66,13 @@
 | 11/18 | 미리보기 숨기기·방해 금지는 사용자 단위(`user_notification_settings`, V6, `/users/me/notification-settings`), 그룹 알림 끄기는 `group_members.notif_muted` | 사양서 10장에 둘 곳이 없음. 기기·그룹마다 다를 이유가 적음 |
 | 11/18 | 푸시 대상: 새 메시지(입장·퇴장 시스템 메시지 포함), 내보내진 본인, 새 기기 로그인(다른 기기로). 일정·AI는 해당 단계에서 | AUTH-03 "새 기기 로그인 알림" 포함 |
 | 11/18 | 동영상 소리가 컨테이너에 못 들어가면(AMR-NB 등) 영상은 그대로, 소리만 AAC로 변환. 그래도 안 되면 `UNSUPPORTED_CODEC` | 에뮬레이터 카메라 영상이 `NOT_A_VIDEO`로 거부됨 (모바일 S10-2) |
+| 11/18 | 반복은 RRULE 저장(`FREQ=WEEKLY\|MONTHLY\|YEARLY`, `INTERVAL`, `UNTIL`\|`COUNT`만), 펼치기는 java.time 직접 구현. 없는 날짜(31일·2/29)는 건너뜀 | 앱이 쓰는 범위만. 라이브러리 추가 없이 (필요해지면 lib-recur로 교체) |
+| 11/18 | 반복 일정 수정·삭제는 시리즈 전체만 ("이번 일정만"은 v1.1) | v1.0 범위 |
+| 11/18 | 종일 일정은 `startDate`·`endDate`(포함)로 받고 서울 00:00 ~ 끝날 다음 날 00:00으로 저장 | 시간대 혼동 방지 |
+| 11/18 | 일정 필터 `memberIds`·`roles`는 합집합, 참여 구성원 기준. 기간 조회는 최대 100일, 페이징 없음 | SCH-02 |
+| 11/18 | 리마인드는 `schedules.reminders`(text[]) 일정별 선택, 1분 스케줄러 + `schedule_reminder_sends` PK로 회차·종류마다 한 번 | 10.2에 알림 컬럼이 없음. 서버 여러 대 대비 |
+| 11/18 | 할 일 완료는 구성원 누구나, 내용 수정·삭제는 등록한 사람·ADMIN 이상. 채팅방 한 줄 알림은 완료 요청의 `announce=true`일 때만 | 장 봐 온 사람이 체크. 그룹 설정화는 S20 |
+| 11/18 | 공휴일은 마이그레이션으로 해마다 추가 (2026~2027 V7). 자동 갱신·관리자 수정은 S20 | 공공데이터 API 키 필요 |
 
 ## 3. Figma 상태
 
@@ -119,9 +126,9 @@
 | - | API 계약 `docs/api/openapi.yaml` 생성·CI 확인 | ✅ PR #7 |
 | S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ PR #8 |
 | S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ PR #10 |
-| S11 | NOTI-01 FCM 푸시 + SET-02 알림 설정 API + 새 기기 로그인 알림 | ✅ 이번 PR |
-| S12 | SCH-01~04, TODO-01 | 다음 |
-| S14 | PLC-01~06 | |
+| S11 | NOTI-01 FCM 푸시 + SET-02 알림 설정 API + 새 기기 로그인 알림 | ✅ PR #12 |
+| S12 | SCH-01~05 일정·반복·리마인드·공휴일·겹침, TODO-01 할 일 | ✅ 이번 PR |
+| S14 | PLC-01~06 | 다음 |
 | S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -171,7 +178,7 @@
 **메시지**: data 메시지만 (notification 없음), Android 우선순위 HIGH. 값은 모두 문자열
 | 키 | 값 |
 |---|---|
-| `type` | `CHAT_MESSAGE` · `MEMBER_REMOVED` · `NEW_DEVICE_LOGIN` (일정·AI는 해당 단계에서 추가) |
+| `type` | `CHAT_MESSAGE` · `MEMBER_REMOVED` · `NEW_DEVICE_LOGIN` · `SCHEDULE_REMINDER`(S12) (AI는 S16~) |
 | `channel` | `CHAT` · `SCHEDULE` · `AI` · `SYSTEM` (앱 알림 채널) |
 | `silent` | `"true"`면 방해 금지 시간 → 소리·진동 없이 |
 | `sentAt` | +09:00 ISO-8601 |
@@ -181,11 +188,13 @@
 | `mediaCount` | IMAGE·VIDEO |
 | `body` | TEXT·SYSTEM이고 받는 사람이 미리보기를 숨기지 않았을 때만. 100자 넘으면 잘라서 `…`. **숨김이면 키 자체가 없다** |
 | `sessionId`, `platform`, `deviceName?` | NEW_DEVICE_LOGIN. 새로 로그인한 기기 (기기 관리 화면 `GET /users/me/sessions`의 sessionId) |
+| `scheduleId`, `startsAt`, `allDay`, `reminder`, `title?` | SCHEDULE_REMINDER (`channel=SCHEDULE`, `groupId`·`groupName` 포함). `startsAt`은 그 회차 시작(+09:00), `reminder`는 `PREV_DAY_20`·`MIN_10`·`MIN_30`·`HOUR_1`·`DAY_1`. 미리보기를 숨긴 사람에게는 `title` 키가 없다 |
 
 **받는 사람**
 - `CHAT_MESSAGE`: 그룹 구성원 중 보낸 사람(시스템 메시지는 들어오거나 나간 본인), 나간 사람, 그룹 알림을 끈 사람, 그 메시지보다 늦게 들어온 사람을 뺀다
 - `MEMBER_REMOVED`: 내보내진 본인 (`channel=SYSTEM`). 다른 구성원은 퇴장 시스템 메시지로 `CHAT_MESSAGE`를 받는다
 - `NEW_DEVICE_LOGIN`: 처음 쓰는 기기(`deviceId`)로 로그인하면 그 사람의 다른 기기로. 같은 기기로 다시 로그인하면 보내지 않는다
+- `SCHEDULE_REMINDER`: 그 일정의 참여 구성원 중 그룹에 남아 있고 그룹 알림을 끄지 않은 사람 (등록한 사람이라도 참여자가 아니면 받지 않는다)
 - 채팅방을 보고 있는지는 서버가 따지지 않는다. 앱이 화면에 있으면 앱이 표시하지 않는다 (STOMP로 이미 받았다)
 
 **설정 (SET-02, 화면은 모바일 S20)**
@@ -194,14 +203,45 @@
 
 **서버 설정**: `infra/.env`의 `FIREBASE_CREDENTIALS_PATH`(서비스 계정 키 경로, `~/` 가능). 비어 있으면 보내지 않고 로그만 남긴다 (CI·테스트). 운영은 `FAMLOG_PUSH_CREDENTIALS_PATH`
 
+### 일정·할 일 규칙 (S12, 앱 S13 참고)
+
+**일정** (`/groups/{groupId}/schedules`, `/schedules/{id}`)
+- 등록 `POST` → 201. 시간 일정 `{allDay:false, startsAt, endsAt}`(+09:00, 끝 ≥ 시작), 종일 `{allDay:true, startDate, endDate}`(마지막 날 포함). 길이 최대 1년
+- `participantIds` 1~20명, 이 그룹의 활성 구성원. 나중에 나간 사람은 참여자로 남고(수정할 때 그대로 둘 수 있음), 알림만 받지 않는다
+- `rrule`: `FREQ=WEEKLY|MONTHLY|YEARLY`, `INTERVAL`(1~99), `UNTIL`(YYYYMMDD = 그날 서울 시각까지, 또는 YYYYMMDDTHHMMSSZ) 또는 `COUNT`(1~999). 그 밖(BYDAY 등)은 400. 서버가 정해진 순서로 바꿔 저장
+  - 회차는 첫 회차의 서울 요일·날짜·시각을 그대로 옮긴다. 31일 매월·2/29 매년은 그 날짜가 없는 달·해를 건너뛴다
+- `reminders`: 키를 빼면 기본값(시간 일정 `[PREV_DAY_20, HOUR_1]`, 종일 `[PREV_DAY_20]`), `[]`이면 알림 없음, 최대 3개. 종일 일정은 `PREV_DAY_20`만
+- 수정 `PATCH /schedules/{id}`: **값 전체 + 조회한 `version`**. version이 다르면 409 `VERSION_CONFLICT`, 없으면 400. 반복 일정은 시리즈 전체가 바뀐다 (이번 회차만은 v1.1)
+- 삭제 `DELETE` → 204 (시리즈 전체). 수정·삭제는 등록한 사람 또는 ADMIN 이상, 아니면 403 `GROUP_ROLE_REQUIRED`
+- 다른 그룹(나간 그룹 포함) 일정 id → 404
+- 기간 조회 `GET ?from=&to=`(서울 날짜, 포함, 1~100일) → `{items:[회차]}`, 시작 순. 반복 일정은 회차마다 한 줄(같은 `scheduleId`, `recurring:true`). 기간에 걸친 일정도 나온다
+  - `memberIds`·`roles`(여러 개, 반복 파라미터): 그 구성원이 참여하는 일정만. 둘 다 주면 합집합. 역할은 이 그룹에서의 `familyRole`
+- 겹침 `GET /schedules/conflicts?startsAt=&endsAt=&memberIds=&excludeId=` → `{items:[{scheduleId, title, allDay, startsAt, endsAt, userIds}]}`. `userIds`는 요청한 구성원 중 그 일정 참여자. 딱 붙은 일정은 겹침 아님. 쿼리의 `+`는 `%2B`로
+- 리마인드: 서버가 1분마다 보낸다(푸시 규칙의 `SCHEDULE_REMINDER`). 알림 시각이 등록·수정보다 앞이면 보내지 않는다 (20:30에 내일 일정을 넣으면 전날 20:00 알림은 없음). 서버가 멈췄다 켜지면 지난 5분까지만 보낸다
+- 음력(`calendar_type`·`lunar_month_day`)·장소(`place_id`)는 컬럼만. 장소 연결 API는 S14
+
+**공휴일** `GET /holidays?year=` (로그인만, 2000~2100) → `{items:[{date, name, substitute}]}` 날짜 순. 2026~2027만 있다 (없는 해는 빈 목록)
+
+**할 일** (`/groups/{groupId}/todos`, `/todos/{id}`)
+- 등록 `POST {title, assigneeId?, dueDate?}` → 201. `kind`는 TASK만 (SHOPPING은 v1.1, 400). 담당자는 활성 구성원
+- 목록 `GET ?assigneeId=&done=&cursor=&size=`(기본 50, 최대 100) → `{items, nextCursor}`. 안 한 일(기한 이른 순, 기한 없음은 뒤) 다음에 완료한 일(최근 완료 순). `done=true|false`로 한쪽만
+- 수정 `PATCH {version, title?, assigneeId?, dueDate?, done?, announce?}`: 보낸 키만 바뀐다. `assigneeId`·`dueDate`는 `null`을 보내면 지운다
+  - 제목·담당자·기한은 등록한 사람 또는 ADMIN 이상(403), `done`은 구성원 누구나. version이 다르면 409
+  - `done:true, announce:true`로 **새로** 완료하면 채팅방에 시스템 메시지 "○○님이 '우유 사 오기' 할 일을 완료했어요." (payload `{kind:"TODO_DONE", userId, todoId}`) → 다른 가족에게 채팅 푸시
+- 삭제 → 204 (등록한 사람 또는 ADMIN 이상). 다른 그룹 id → 404
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
 - 앨범 단계: pHash·흐림 점수, `GET /groups/{id}/media?month=`
 - 출시 전: 위치기반서비스 신고 확인 후 `photo-location-enabled` 켜기, "사진 위치 사용" 동의 API(설정 화면)
 - S20: 푸시 발송 실패 재시도 (지금은 한 번 보내고 실패는 로그만). 계정 삭제(ACC-01)는 전 세션 폐기를 부르면 토큰도 함께 지워진다
-- S12~: 일정 리마인드·AI 후보 푸시 (`channel=SCHEDULE`·`AI`, 같은 발송기)
-- S12~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
+- S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
+- S16~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
+- S14: 일정 장소 연결 (`schedules.place_id` FK·API 필드)
+- S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지
+- v1.1: 반복 일정 "이번 회차만" 수정·삭제, 음력 반복(DIF-04), 장보기 목록(TODO-02)
+- 매년: 다음 해 공휴일 마이그레이션 (2028년분은 2027년 하반기에, 우주항공청 월력요항 기준)
 - S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리, `group_settings`(AI 분석 설정)
 - 모바일 요청 검토: `GET /users/me` (지금은 앱이 로그인 응답의 user를 저장해 씀)
 - 자리 값: 캘린더 팔레트 뒤 8색(디자인 확정 시), 초대 링크 도메인 `famlog.app`(App Links 도메인 확정 시)
@@ -225,6 +265,9 @@
 | 10.2 (S11) | `user_notification_settings`(user_id PK, preview_hidden, quiet_enabled, quiet_start, quiet_end) 추가 |
 | 11.3 (S11) | `GET·PATCH /users/me/notification-settings` 추가, `PUT /devices/token` 요청 `{token, appVersion}` |
 | 4.2·13 (S11) | 푸시는 data 메시지만, 키 목록(위 "푸시 규칙"), FCM HTTP v1 직접 호출 |
+| 10.2 (S12) | `schedules.reminders`(text[], 기본 `{PREV_DAY_20,HOUR_1}`) 추가, `schedule_reminder_sends`(schedule_id, occurrence_start, kind — PK) 추가, `holidays.id` + UNIQUE(date, name) |
+| 11.3 (S12) | `GET /groups/{id}/schedules/conflicts`(SCH-05), `GET /todos/{id}`, 일정 기간 조회 응답 `{items}`(회차, 페이징 없음), 할 일 수정의 `announce` |
+| 4.3 (S12) | 반복은 매주·매월·매년 + 간격·종료(날짜/횟수), 수정은 시리즈 전체 / 리마인드 선택지 5개 / 할 일 완료는 누구나 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -253,3 +296,4 @@
 | 2026-11-17 | CHAT-05 | 미디어 업로드(Presigned PUT·매직 바이트 검사, V5), Redis Streams 처리 요청·결과, 사진 묶음·동영상 메시지, 302 내려받기, Python 워커(GPS 제거·재인코딩·썸네일 3단계·촬영 시각·재시도 3회 후 DLQ), compose·CI | feat(CHAT-05) |
 | 2026-11-18 | CHAT-05 | 워커: AMR-NB 등 컨테이너에 못 넣는 소리는 AAC로만 변환(영상은 복사 유지), 그래도 실패하면 `UNSUPPORTED_CODEC` | fix(CHAT-05) |
 | 2026-11-18 | NOTI-01·SET-02 | FCM 푸시(data 메시지, HTTP v1): 기기 토큰 등록·삭제·로그아웃 시 삭제·무효 토큰 정리, 새 메시지·입장/퇴장·내보내짐·새 기기 로그인 푸시, 그룹 알림 끄기·미리보기 숨기기·방해 금지(V6) | feat(S11) |
+| 2026-11-18 | SCH-01~05·TODO-01 | 일정 등록·수정·삭제(낙관적 잠금), 반복 RRULE 펼치기, 구성원·역할 필터, 겹침 조회, 리마인드 스케줄러·푸시, 공휴일 2026~2027, 할 일·커서 목록·완료 채팅 알림(V7) | feat(S12) |

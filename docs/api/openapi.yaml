@@ -579,6 +579,284 @@ paths:
       summary: 읽음 위치 저장
       tags:
       - chat-controller
+  /api/v1/groups/{groupId}/schedules:
+    get:
+      description: "서울 날짜 from~to (포함, 최대 100일). 반복 일정은 회차로 펼친다. memberIds·roles 를\
+        \ 주면 그 구성원이 참여하는 일정만 (둘 다 주면 합집합)"
+      operationId: listSchedules
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: from
+        required: true
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: to
+        required: true
+        schema:
+          type: string
+          format: date
+      - description: 구성원 userId 여러 개
+        in: query
+        name: memberIds
+        required: false
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int64
+          uniqueItems: true
+      - description: 가족 역할 여러 개 (MOTHER 등)
+        in: query
+        name: roles
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - FATHER
+            - MOTHER
+            - SON
+            - DAUGHTER
+            - GRANDFATHER
+            - GRANDMOTHER
+            - OTHER
+          uniqueItems: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OccurrenceListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 기간 일정
+      tags:
+      - schedule-controller
+    post:
+      description: "참여 구성원 1명 이상. 반복은 RRULE(FREQ=WEEKLY|MONTHLY|YEARLY, INTERVAL,\
+        \ UNTIL|COUNT)"
+      operationId: createSchedule
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 일정 등록
+      tags:
+      - schedule-controller
+  /api/v1/groups/{groupId}/schedules/conflicts:
+    get:
+      description: "등록 화면용 (SCH-05): 이 시간에 memberIds 가 참여하는 다른 일정. 딱 붙은 일정은 겹친 것으로\
+        \ 보지 않는다"
+      operationId: scheduleConflicts
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: startsAt
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: endsAt
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: memberIds
+        required: true
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int64
+          uniqueItems: true
+      - description: 수정 중인 일정 id (빼고 본다)
+        in: query
+        name: excludeId
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 겹치는 일정
+      tags:
+      - schedule-controller
+  /api/v1/groups/{groupId}/todos:
+    get:
+      description: "안 한 일(기한 이른 순, 기한 없음은 뒤) 다음에 완료한 일(최근 완료 순). done 으로 한쪽만 볼 수 있\
+        다. 커서 페이징"
+      operationId: listTodos
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+          enum:
+          - TASK
+          - SHOPPING
+      - in: query
+        name: assigneeId
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - description: "true 완료한 일만, false 안 한 일만, 없으면 둘 다"
+        in: query
+        name: done
+        required: false
+        schema:
+          type: boolean
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          maximum: 100
+          minimum: 1
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 할 일 목록
+      tags:
+      - todo-controller
+    post:
+      description: 담당자는 이 그룹 가족. kind 는 TASK 만 (SHOPPING 은 v1.1)
+      operationId: createTodo
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTodoRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 할 일 등록
+      tags:
+      - todo-controller
+  /api/v1/holidays:
+    get:
+      description: 그해 공휴일·대체공휴일 (날짜 순). 데이터가 없는 해는 빈 목록
+      operationId: holidays
+      parameters:
+      - in: query
+        name: year
+        required: true
+        schema:
+          type: integer
+          format: int32
+          maximum: 2100
+          minimum: 2000
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HolidayListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 공휴일
+      tags:
+      - holiday-controller
   /api/v1/media/upload-urls:
     post:
       description: "한 번에 30개. 사진(jpeg·png·webp·heic) 30MB, 동영상(mp4·mov) 500MB·5분 이\
@@ -752,6 +1030,170 @@ paths:
       summary: 내 공감 취소
       tags:
       - message-controller
+  /api/v1/schedules/{scheduleId}:
+    delete:
+      description: 반복 일정은 시리즈 전체를 지운다. MEMBER 는 본인이 등록한 일정만
+      operationId: deleteSchedule
+      parameters:
+      - in: path
+        name: scheduleId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 일정 삭제
+      tags:
+      - schedule-controller
+    get:
+      description: 다른 그룹 일정이면 404
+      operationId: getSchedule
+      parameters:
+      - in: path
+        name: scheduleId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 일정 하나
+      tags:
+      - schedule-controller
+    patch:
+      description: "값 전체와 조회한 version 을 보낸다. 반복 일정은 시리즈 전체가 바뀐다. MEMBER 는 본인이 등록한\
+        \ 일정만 (403), version 이 다르면 409"
+      operationId: updateSchedule
+      parameters:
+      - in: path
+        name: scheduleId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 일정 수정
+      tags:
+      - schedule-controller
+  /api/v1/todos/{todoId}:
+    delete:
+      description: 등록한 사람이나 ADMIN 이상
+      operationId: deleteTodo
+      parameters:
+      - in: path
+        name: todoId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 할 일 삭제
+      tags:
+      - todo-controller
+    get:
+      description: 다른 그룹 할 일이면 404
+      operationId: getTodo
+      parameters:
+      - in: path
+        name: todoId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 할 일 하나
+      tags:
+      - todo-controller
+    patch:
+      description: "바꿀 값과 version 을 보낸다. 제목·담당자·기한은 등록한 사람이나 ADMIN 이상(403), 완료(done)는\
+        \ 누구나. announce=true 로 완료하면 채팅방에 한 줄 알림"
+      operationId: updateTodo
+      parameters:
+      - in: path
+        name: todoId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTodoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 할 일 수정·완료
+      tags:
+      - todo-controller
   /api/v1/users/me/current-group:
     put:
       description: 구성원인 그룹만. 아니면 403 GROUP_NOT_MEMBER
@@ -1021,6 +1463,34 @@ components:
           - OWNER
       required:
       - role
+    ConflictListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictResponse"
+    ConflictResponse:
+      type: object
+      properties:
+        allDay:
+          type: boolean
+        endsAt:
+          type: string
+          format: date-time
+        scheduleId:
+          type: integer
+          format: int64
+        startsAt:
+          type: string
+          format: date-time
+        title:
+          type: string
+        userIds:
+          type: array
+          items:
+            type: integer
+            format: int64
     CreateGroupRequest:
       type: object
       properties:
@@ -1031,6 +1501,31 @@ components:
           minLength: 0
       required:
       - name
+    CreateTodoRequest:
+      type: object
+      properties:
+        assigneeId:
+          type: integer
+          format: int64
+          description: 담당자 userId (이 그룹 가족). 없으면 담당자 없음
+        dueDate:
+          type: string
+          format: date
+          description: 기한 (서울 날짜)
+          example: 2026-11-21
+        kind:
+          type: string
+          description: TASK 만 (SHOPPING 은 v1.1). 없으면 TASK
+          enum:
+          - TASK
+          - SHOPPING
+        title:
+          type: string
+          example: 우유 사 오기
+          maxLength: 100
+          minLength: 0
+      required:
+      - title
     CurrentGroupRequest:
       type: object
       properties:
@@ -1156,6 +1651,24 @@ components:
         unreadCount:
           type: integer
           format: int64
+    HolidayListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HolidayResponse"
+    HolidayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+        substitute:
+          type: boolean
+          description: 대체공휴일
     InviteResponse:
       type: object
       properties:
@@ -1375,6 +1888,46 @@ components:
         quietStart:
           type: string
           example: 22:00
+    OccurrenceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OccurrenceResponse"
+    OccurrenceResponse:
+      type: object
+      properties:
+        allDay:
+          type: boolean
+        createdBy:
+          type: integer
+          format: int64
+        endDate:
+          type: string
+          format: date
+        endsAt:
+          type: string
+          format: date-time
+        participantIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        recurring:
+          type: boolean
+          description: 반복 일정의 회차
+        scheduleId:
+          type: integer
+          format: int64
+        startDate:
+          type: string
+          format: date
+        startsAt:
+          type: string
+          format: date-time
+        title:
+          type: string
     ReactionRequest:
       type: object
       properties:
@@ -1490,6 +2043,136 @@ components:
           - SYSTEM
           - CANDIDATE
           - POLL
+    ScheduleRequest:
+      type: object
+      properties:
+        allDay:
+          type: boolean
+          description: 종일 일정
+        endDate:
+          type: string
+          format: date
+          description: 종일 일정의 마지막 날 (포함)
+          example: 2026-11-22
+        endsAt:
+          type: string
+          format: date-time
+          description: 시간 일정의 끝 (시작과 같아도 된다)
+          example: 2026-11-21T12:00:00+09:00
+        memo:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        participantIds:
+          type: array
+          description: "참여 구성원 userId (1명 이상, 이 그룹의 가족)"
+          items:
+            type: integer
+            format: int64
+          maxItems: 20
+          minItems: 0
+          uniqueItems: true
+        reminders:
+          type: array
+          description: "리마인드. 보내지 않으면 기본값(시간 일정: 전날 20:00 + 1시간 전, 종일: 전날 20:00),\
+            \ 빈 배열이면 알림 없음. 종일 일정은 PREV_DAY_20만"
+          items:
+            type: string
+            enum:
+            - PREV_DAY_20
+            - MIN_10
+            - MIN_30
+            - HOUR_1
+            - DAY_1
+          maxItems: 3
+          minItems: 0
+        rrule:
+          type: string
+          description: 반복 RRULE. 없으면 반복 안 함
+          example: FREQ=WEEKLY;UNTIL=20270228
+          maxLength: 200
+          minLength: 0
+        startDate:
+          type: string
+          format: date
+          description: 종일 일정의 첫날
+          example: 2026-11-21
+        startsAt:
+          type: string
+          format: date-time
+          description: 시간 일정의 시작
+          example: 2026-11-21T11:00:00+09:00
+        title:
+          type: string
+          example: 할머니 병원
+          maxLength: 100
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+          description: "수정할 때 필수: 조회한 일정의 version (다르면 409 VERSION_CONFLICT)"
+      required:
+      - allDay
+      - participantIds
+      - title
+    ScheduleResponse:
+      type: object
+      properties:
+        allDay:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: integer
+          format: int64
+        endDate:
+          type: string
+          format: date
+          description: 종일 일정의 마지막 날 (포함)
+        endsAt:
+          type: string
+          format: date-time
+        groupId:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        memo:
+          type: string
+        participantIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        reminders:
+          type: array
+          items:
+            type: string
+            enum:
+            - PREV_DAY_20
+            - MIN_10
+            - MIN_30
+            - HOUR_1
+            - DAY_1
+        rrule:
+          type: string
+        startDate:
+          type: string
+          format: date
+          description: 종일 일정의 첫날 (시간 일정이면 null)
+        startsAt:
+          type: string
+          format: date-time
+        title:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     SessionResponse:
       type: object
       properties:
@@ -1539,6 +2222,58 @@ components:
       - device
       - nickname
       - providerToken
+    TodoListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TodoResponse"
+        nextCursor:
+          type: string
+          description: 다음 페이지 커서. 없으면 끝
+    TodoResponse:
+      type: object
+      properties:
+        assigneeId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: integer
+          format: int64
+        done:
+          type: boolean
+        doneAt:
+          type: string
+          format: date-time
+        doneBy:
+          type: integer
+          format: int64
+        dueDate:
+          type: string
+          format: date
+        groupId:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum:
+          - TASK
+          - SHOPPING
+        title:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     TokenResponse:
       type: object
       properties:
@@ -1575,6 +2310,35 @@ components:
           description: "호칭 (큰아들, 막내)"
           maxLength: 20
           minLength: 0
+    UpdateTodoRequest:
+      type: object
+      properties:
+        announce:
+          type: boolean
+          description: 완료하면서 채팅방에 한 줄 알림 남기기
+        assigneeId:
+          type:
+          - integer
+          - "null"
+          format: int64
+        done:
+          type: boolean
+          description: "true 완료, false 완료 취소"
+        dueDate:
+          type:
+          - string
+          - "null"
+          format: date
+        title:
+          type: string
+          maxLength: 100
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+          description: 조회한 할 일의 version (다르면 409 VERSION_CONFLICT)
+      required:
+      - version
     UploadItem:
       type: object
       properties:

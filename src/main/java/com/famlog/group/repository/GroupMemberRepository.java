@@ -19,6 +19,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     List<GroupMember> findByGroupIdAndLeftAtIsNullOrderByJoinedAtAsc(Long groupId);
 
+    /** 나간 구성원 포함 */
+    List<GroupMember> findByGroupId(Long groupId);
+
     /** 읽음 위치를 바꿀 때 (동시에 읽음이 들어와도 앞으로만 움직이게) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from GroupMember m where m.groupId = :groupId and m.userId = :userId and m.leftAt is null")
