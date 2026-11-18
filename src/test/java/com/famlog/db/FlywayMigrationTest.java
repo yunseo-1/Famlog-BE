@@ -170,6 +170,16 @@ class FlywayMigrationTest extends IntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void V6_알림_설정의_방해_금지_시작과_끝은_같을_수_없다() {
+        long userId = insertUser("엄마");
+        jdbcTemplate.update("INSERT INTO user_notification_settings (user_id) VALUES (?)", userId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE user_notification_settings SET quiet_start = '07:00' WHERE user_id = ?", userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
             + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
 

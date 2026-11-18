@@ -122,6 +122,12 @@ public class SessionTokenService {
                 .ifPresent(token -> revokeSession(token.getSessionId()));
     }
 
+    /** 이 기기로 로그인한 적이 있는가 (로그아웃한 세션 포함) */
+    @Transactional(readOnly = true)
+    public boolean hasUsedDevice(long userId, String deviceId) {
+        return sessionRepository.existsByUserIdAndDeviceId(userId, deviceId);
+    }
+
     /** 로그인 기기 목록 (AUTH-03) */
     @Transactional(readOnly = true)
     public List<UserSession> listActiveSessions(long userId) {

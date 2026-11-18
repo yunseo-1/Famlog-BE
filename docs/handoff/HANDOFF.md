@@ -61,6 +61,10 @@
 | 11/17 | 워커는 S3·Redis만 쓰고 DB 반영은 API(`media-results` 스트림 소비) | 스키마·WebSocket 이벤트는 Java만 관리 |
 | 11/17 | 사진 위치 저장은 `famlog.media.photo-location-enabled=false`(기본) + LOCATION 동의일 때만, 저장 시 `location_access_logs` | 위치기반서비스 신고 확인 전 (8.6) |
 | 11/17 | pHash·흐림 점수·워커 FastAPI는 앨범 단계로 미룸 | 지금 쓰는 곳이 없음 |
+| 11/18 | 푸시는 FCM HTTP v1 직접 호출(`google-auth-library-oauth2-http`로 OAuth만), firebase-admin 안 씀 | 쓰지 않는 의존성이 많고, v1은 어차피 기기별 호출 |
+| 11/18 | 푸시는 **data 메시지만**(notification 없음, Android HIGH). 채널·묶음·화면에 있을 때 숨기기는 앱이 | 모바일 요청 (채널 4개, 열린 채팅방이면 표시 안 함) |
+| 11/18 | 미리보기 숨기기·방해 금지는 사용자 단위(`user_notification_settings`, V6, `/users/me/notification-settings`), 그룹 알림 끄기는 `group_members.notif_muted` | 사양서 10장에 둘 곳이 없음. 기기·그룹마다 다를 이유가 적음 |
+| 11/18 | 푸시 대상: 새 메시지(입장·퇴장 시스템 메시지 포함), 내보내진 본인, 새 기기 로그인(다른 기기로). 일정·AI는 해당 단계에서 | AUTH-03 "새 기기 로그인 알림" 포함 |
 | 11/18 | 동영상 소리가 컨테이너에 못 들어가면(AMR-NB 등) 영상은 그대로, 소리만 AAC로 변환. 그래도 안 되면 `UNSUPPORTED_CODEC` | 에뮬레이터 카메라 영상이 `NOT_A_VIDEO`로 거부됨 (모바일 S10-2) |
 
 ## 3. Figma 상태
@@ -113,10 +117,10 @@
 | S4 | AUTH-01~03 소셜 로그인·가입·연령 확인·기기 관리 | ✅ PR #5 |
 | S5 | GRP-01~05 가족 그룹·초대·역할·구성원 관리 | ✅ PR #6 |
 | - | API 계약 `docs/api/openapi.yaml` 생성·CI 확인 | ✅ PR #7 |
-| S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ 이번 PR |
-| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ 이번 PR |
-| S11 | NOTI-01 FCM 푸시 (+ 새 기기 로그인 알림) | 다음 |
-| S12 | SCH-01~04, TODO-01 | |
+| S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ PR #8 |
+| S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ PR #10 |
+| S11 | NOTI-01 FCM 푸시 + SET-02 알림 설정 API + 새 기기 로그인 알림 | ✅ 이번 PR |
+| S12 | SCH-01~04, TODO-01 | 다음 |
 | S14 | PLC-01~06 | |
 | S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
@@ -153,12 +157,50 @@
 6. 보기: `GET /api/v1/media/{id}/content?variant=THUMB_S|THUMB_M|THUMB_L|ORIGINAL` (Authorization 헤더, 302 따라가기). READY 전에는 404
 - 로컬 에뮬레이터에서 업로드하려면 `infra/.env`에 `S3_PUBLIC_ENDPOINT=http://10.0.2.2:8333`
 
+### 푸시 규칙 (S11, 앱 S11 참고)
+
+**토큰**
+- `PUT /api/v1/devices/token {token, appVersion?}` → 204. 앱 시작·`onNewToken` 때 부른다. 플랫폼은 로그인 때 보낸 기기 정보를 쓴다
+  - 로그인한 기기(세션) 하나에 토큰 하나: 새 토큰을 보내면 그 기기의 이전 토큰을 바꾼다. 같은 토큰을 다시 보내면 앱 버전만 바뀐다
+  - 한 사람이 여러 기기를 쓰면 기기마다 받는다. 같은 토큰이 다른 계정에 있으면 지금 계정으로 옮긴다 (한 폰에서 계정을 바꾼 경우)
+  - 폐기된 세션이면 401 `AUTH_INVALID`, 토큰이 비었거나 512자를 넘으면 400
+- `DELETE /api/v1/devices/token` → 204 (없어도 204). 알림을 받지 않으려 할 때
+- 로그아웃·원격 로그아웃·전 세션 폐기 때 서버가 그 기기의 토큰을 지운다 (앱이 따로 부를 필요 없음). 만료된 세션의 토큰으로는 보내지 않는다
+- FCM이 `UNREGISTERED`·`SENDER_ID_MISMATCH`·잘못된 토큰이라고 하면 서버가 지운다 → 앱은 시작할 때마다 PUT 하면 된다
+
+**메시지**: data 메시지만 (notification 없음), Android 우선순위 HIGH. 값은 모두 문자열
+| 키 | 값 |
+|---|---|
+| `type` | `CHAT_MESSAGE` · `MEMBER_REMOVED` · `NEW_DEVICE_LOGIN` (일정·AI는 해당 단계에서 추가) |
+| `channel` | `CHAT` · `SCHEDULE` · `AI` · `SYSTEM` (앱 알림 채널) |
+| `silent` | `"true"`면 방해 금지 시간 → 소리·진동 없이 |
+| `sentAt` | +09:00 ISO-8601 |
+| `groupId`, `groupName` | CHAT_MESSAGE·MEMBER_REMOVED. 묶음 키는 `groupId` |
+| `messageId`, `seq`, `messageType` | CHAT_MESSAGE. `messageType` = TEXT·IMAGE·VIDEO·SYSTEM(입장·퇴장) |
+| `senderId`, `senderName` | CHAT_MESSAGE 중 사람이 보낸 것. 이름은 그룹 호칭(`familyTitle`)이 있으면 호칭, 없으면 닉네임 |
+| `mediaCount` | IMAGE·VIDEO |
+| `body` | TEXT·SYSTEM이고 받는 사람이 미리보기를 숨기지 않았을 때만. 100자 넘으면 잘라서 `…`. **숨김이면 키 자체가 없다** |
+| `sessionId`, `platform`, `deviceName?` | NEW_DEVICE_LOGIN. 새로 로그인한 기기 (기기 관리 화면 `GET /users/me/sessions`의 sessionId) |
+
+**받는 사람**
+- `CHAT_MESSAGE`: 그룹 구성원 중 보낸 사람(시스템 메시지는 들어오거나 나간 본인), 나간 사람, 그룹 알림을 끈 사람, 그 메시지보다 늦게 들어온 사람을 뺀다
+- `MEMBER_REMOVED`: 내보내진 본인 (`channel=SYSTEM`). 다른 구성원은 퇴장 시스템 메시지로 `CHAT_MESSAGE`를 받는다
+- `NEW_DEVICE_LOGIN`: 처음 쓰는 기기(`deviceId`)로 로그인하면 그 사람의 다른 기기로. 같은 기기로 다시 로그인하면 보내지 않는다
+- 채팅방을 보고 있는지는 서버가 따지지 않는다. 앱이 화면에 있으면 앱이 표시하지 않는다 (STOMP로 이미 받았다)
+
+**설정 (SET-02, 화면은 모바일 S20)**
+- `GET·PATCH /api/v1/users/me/notification-settings {previewHidden, quietHoursEnabled, quietStart:"HH:mm", quietEnd:"HH:mm"}`: 보낸 값만 바뀐다. 기본값은 미리보기 보이기, 방해 금지 꺼짐(22:00~07:00). 서울 시각, 자정을 넘겨도 된다. 시작=끝이면 400
+- `GET·PATCH /api/v1/groups/{groupId}/members/me/preferences {notifMuted}`: 이 그룹 알림 끄기. 구성원이 아니면 403
+
+**서버 설정**: `infra/.env`의 `FIREBASE_CREDENTIALS_PATH`(서비스 계정 키 경로, `~/` 가능). 비어 있으면 보내지 않고 로그만 남긴다 (CI·테스트). 운영은 `FAMLOG_PUSH_CREDENTIALS_PATH`
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
 - 앨범 단계: pHash·흐림 점수, `GET /groups/{id}/media?month=`
 - 출시 전: 위치기반서비스 신고 확인 후 `photo-location-enabled` 켜기, "사진 위치 사용" 동의 API(설정 화면)
-- S11: 새 기기 로그인 알림, 입장·내보내기 푸시, 새 메시지 푸시(`notif_muted`·방해 금지)
+- S20: 푸시 발송 실패 재시도 (지금은 한 번 보내고 실패는 로그만). 계정 삭제(ACC-01)는 전 세션 폐기를 부르면 토큰도 함께 지워진다
+- S12~: 일정 리마인드·AI 후보 푸시 (`channel=SCHEDULE`·`AI`, 같은 발송기)
 - S12~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
 - S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리, `group_settings`(AI 분석 설정)
 - 모바일 요청 검토: `GET /users/me` (지금은 앱이 로그인 응답의 user를 저장해 씀)
@@ -180,6 +222,9 @@
 | 11.3 (S9) | `GET /media/{id}/content?variant=` 추가, 메시지 전송에 `type`·`mediaIds`, 메시지 응답에 `media` |
 | 11.4 (S9) | 이벤트 `media.updated` |
 | 13.2 (S9) | 워커 FastAPI·OpenCV·imagehash는 앨범 단계로 미룸, 워커 이미지 python:3.12-slim + FFmpeg |
+| 10.2 (S11) | `user_notification_settings`(user_id PK, preview_hidden, quiet_enabled, quiet_start, quiet_end) 추가 |
+| 11.3 (S11) | `GET·PATCH /users/me/notification-settings` 추가, `PUT /devices/token` 요청 `{token, appVersion}` |
+| 4.2·13 (S11) | 푸시는 data 메시지만, 키 목록(위 "푸시 규칙"), FCM HTTP v1 직접 호출 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -207,3 +252,4 @@
 | 2026-11-17 | CHAT-02 | Redis 중계 수신을 스레드 하나로 처리해 이벤트 순서 보장 (기본 컨테이너는 메시지마다 새 스레드 → main CI #12에서 read.updated가 message.created보다 먼저 도착) | fix(CHAT-02) `3bcbed4` |
 | 2026-11-17 | CHAT-05 | 미디어 업로드(Presigned PUT·매직 바이트 검사, V5), Redis Streams 처리 요청·결과, 사진 묶음·동영상 메시지, 302 내려받기, Python 워커(GPS 제거·재인코딩·썸네일 3단계·촬영 시각·재시도 3회 후 DLQ), compose·CI | feat(CHAT-05) |
 | 2026-11-18 | CHAT-05 | 워커: AMR-NB 등 컨테이너에 못 넣는 소리는 AAC로만 변환(영상은 복사 유지), 그래도 실패하면 `UNSUPPORTED_CODEC` | fix(CHAT-05) |
+| 2026-11-18 | NOTI-01·SET-02 | FCM 푸시(data 메시지, HTTP v1): 기기 토큰 등록·삭제·로그아웃 시 삭제·무효 토큰 정리, 새 메시지·입장/퇴장·내보내짐·새 기기 로그인 푸시, 그룹 알림 끄기·미리보기 숨기기·방해 금지(V6) | feat(S11) |

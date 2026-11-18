@@ -43,6 +43,8 @@ dependencies {
     implementation('software.amazon.awssdk:s3') {
         exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
     }
+    // FCM HTTP v1 호출용 OAuth 토큰 (서비스 계정). 발송은 RestClient로 직접 한다 (firebase-admin은 쓰지 않는 의존성이 많다)
+    implementation 'com.google.auth:google-auth-library-oauth2-http:1.57.0'
     runtimeOnly 'org.postgresql:postgresql'
 
     compileOnly 'org.projectlombok:lombok'

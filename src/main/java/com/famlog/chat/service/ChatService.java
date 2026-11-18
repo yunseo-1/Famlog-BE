@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import com.famlog.chat.domain.Message;
 import com.famlog.chat.domain.MessageReaction;
 import com.famlog.chat.domain.MessageType;
 import com.famlog.chat.domain.ReactionEmoji;
+import com.famlog.chat.event.MessagePosted;
 import com.famlog.chat.dto.ChatDtos.ChatEvent;
 import com.famlog.chat.dto.ChatDtos.MessageDeleted;
 import com.famlog.chat.dto.ChatDtos.MessageResponse;
@@ -48,7 +50,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <ul>
  * <li>전송: TEXT·IMAGE(사진 묶음)·VIDEO. 방 행을 잠그고 seq를 매긴다 → 같은 방 안에서 겹침·빠짐 없이 순서가 정해진다.
  * 같은 사람이 같은 clientMessageId로 다시 보내면 저장된 메시지를 돌려준다 (중복 저장 없음)</li>
- * <li>실시간 이벤트는 커밋 뒤 ChatRelay로 모든 서버에 보낸다</li>
+ * <li>실시간 이벤트는 커밋 뒤 ChatRelay로 모든 서버에 보낸다. 푸시는 MessagePosted 로 NOTI가 보낸다</li>
  * <li>메시지 id만 있는 API(/messages/{id})는 다른 그룹이거나 입장 전 메시지면 404 (존재 여부 숨김, 사양서 9.3)</li>
  * </ul>
  * 메시지 본문은 로그에 남기지 않는다 (사양서 9.8).
@@ -70,6 +72,7 @@ public class ChatService {
     private final MediaAssetRepository mediaRepository;
     private final MediaProperties mediaProperties;
     private final JsonMapper jsonMapper;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     /** @param duplicate 이미 저장된 메시지를 다시 보낸 경우 (그룹에 다시 알리지 않는다) */
@@ -118,6 +121,7 @@ public class ChatService {
             // 보낸 사람은 그때까지의 메시지를 읽은 것이다
             relay.toGroup(groupId, ChatEvent.READ_UPDATED, new ReadUpdated(groupId, userId, readBefore, seq));
         }
+        events.publishEvent(new MessagePosted(groupId, message.getId()));
         return new SendResult(response, false);
     }
 

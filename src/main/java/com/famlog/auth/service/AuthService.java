@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ import lombok.RequiredArgsConstructor;
  * <li>가입: 약관 동의 + 닉네임 + 출생연도월. 만 14세 미만이면 AGE_RESTRICTED, 역시 아무것도 저장하지 않는다</li>
  * </ol>
  * 제공자 토큰은 항상 먼저 검증한다 (검증 전에는 가입 여부도 알려주지 않는다).
+ * 처음 쓰는 기기로 로그인하면 NewDeviceLoggedIn 을 발행한다 (AUTH-03, 다른 기기로 푸시).
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +46,7 @@ public class AuthService {
     private final SessionTokenService sessionTokenService;
     private final AgePolicy agePolicy;
     private final ConsentProperties consentProperties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     @Transactional
@@ -57,7 +60,13 @@ public class AuthService {
             // 삭제 유예 중 복구는 ACC-01(S20)에서 만든다
             throw new BusinessException(ErrorCode.AUTH_INVALID);
         }
-        return new AuthResult(startSession(user, device), user);
+        boolean newDevice = !sessionTokenService.hasUsedDevice(user.getId(), device.deviceId());
+        TokenPair tokens = startSession(user, device);
+        if (newDevice) {
+            events.publishEvent(new NewDeviceLoggedIn(user.getId(), tokens.sessionId(), device.deviceName(),
+                    device.platform()));
+        }
+        return new AuthResult(tokens, user);
     }
 
     @Transactional
