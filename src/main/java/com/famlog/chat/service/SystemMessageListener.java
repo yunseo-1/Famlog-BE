@@ -2,12 +2,14 @@ package com.famlog.chat.service;
 
 import java.util.Map;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import com.famlog.chat.domain.ChatRoom;
 import com.famlog.chat.domain.Message;
 import com.famlog.chat.dto.ChatDtos.ChatEvent;
+import com.famlog.chat.event.MessagePosted;
 import com.famlog.chat.relay.ChatRelay;
 import com.famlog.chat.repository.ChatRoomRepository;
 import com.famlog.chat.repository.MessageRepository;
@@ -44,6 +46,7 @@ class SystemMessageListener {
     private final MessageAssembler assembler;
     private final ChatRelay relay;
     private final JsonMapper jsonMapper;
+    private final ApplicationEventPublisher events;
 
     @EventListener
     void onJoined(MemberJoined event) {
@@ -77,5 +80,6 @@ class SystemMessageListener {
     private void broadcast(long groupId, Message message) {
         messageRepository.flush();
         relay.toGroup(groupId, ChatEvent.MESSAGE_CREATED, assembler.forGroup(message, groupId));
+        events.publishEvent(new MessagePosted(groupId, message.getId()));
     }
 }

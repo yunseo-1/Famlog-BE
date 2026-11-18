@@ -24,7 +24,7 @@ import com.famlog.auth.jwt.FamlogJwtClaims;
 /**
  * 통합 테스트 베이스: 전체 컨텍스트(보안 필터 체인 포함) + Testcontainers PostgreSQL·Redis + Flyway 마이그레이션.
  * 실제 포트로 서버를 띄운다 (STOMP over WebSocket 테스트가 같은 컨텍스트를 쓰도록). REST는 MockMvc로 부른다.
- * 그룹 인가는 실제 DB(DbGroupAccessChecker)를 쓰고, 소셜 제공자만 가짜(FakeSocialLoginVerifier)로 바꾼다.
+ * 그룹 인가는 실제 DB(DbGroupAccessChecker)를 쓰고, 소셜 제공자(FakeSocialLoginVerifier)와 FCM 발송기(FakePushSender)만 가짜로 바꾼다.
  * 모든 통합 테스트가 같은 설정을 써서 컨텍스트 하나(컨테이너 한 벌)를 공유한다.
  * Docker가 필요하다 (로컬: OrbStack, CI: GitHub Actions ubuntu 러너).
  */
@@ -76,6 +76,12 @@ public abstract class IntegrationTest {
         @Primary
         FakeSocialLoginVerifier fakeSocialLoginVerifier() {
             return new FakeSocialLoginVerifier();
+        }
+
+        @Bean
+        @Primary
+        FakePushSender fakePushSender() {
+            return new FakePushSender();
         }
     }
 }

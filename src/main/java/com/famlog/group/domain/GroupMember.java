@@ -114,6 +114,11 @@ public class GroupMember extends BaseTimeEntity {
         return before;
     }
 
+    /** 이 그룹 알림 끄기 (SET-02) */
+    public void muteNotifications(boolean muted) {
+        this.notifMuted = muted;
+    }
+
     public void changeRole(GroupRole role) {
         this.role = role;
     }

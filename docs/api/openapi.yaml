@@ -128,6 +128,44 @@ paths:
       summary: 소셜 가입
       tags:
       - auth-controller
+  /api/v1/devices/token:
+    delete:
+      description: 이 기기로 푸시를 받지 않는다. 없으면 그대로 204
+      operationId: unregister
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 푸시 토큰 삭제
+      tags:
+      - device-token-controller
+    put:
+      description: "앱 시작·토큰 갱신(onNewToken) 때 부른다. 이 기기의 이전 토큰은 바뀌고, 같은 토큰이 다른 계정에\
+        \ 있으면 옮겨진다. 로그아웃·원격 로그아웃하면 서버가 지운다"
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterTokenRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 푸시 토큰 등록·갱신
+      tags:
+      - device-token-controller
   /api/v1/groups:
     post:
       description: 만든 사람은 그룹장(OWNER). 단체 채팅방이 함께 생기고 현재 그룹이 된다
@@ -335,6 +373,64 @@ paths:
       summary: 내 가족 역할·호칭·캘린더 색
       tags:
       - group-controller
+  /api/v1/groups/{groupId}/members/me/preferences:
+    get:
+      operationId: groupPreferences
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupPreferencesResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 이 그룹 알림 설정
+      tags:
+      - notification-settings-controller
+    patch:
+      description: 끄면 이 그룹의 새 메시지 푸시가 오지 않는다
+      operationId: updateGroupPreferences
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupPreferencesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupPreferencesResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 이 그룹 알림 끄기·켜기
+      tags:
+      - notification-settings-controller
   /api/v1/groups/{groupId}/members/{userId}:
     delete:
       description: 그룹장은 내보낼 수 없다
@@ -678,6 +774,51 @@ paths:
       summary: 현재 그룹 바꾸기
       tags:
       - current-group-controller
+  /api/v1/users/me/notification-settings:
+    get:
+      description: 미리보기 숨기기·방해 금지 시간 (모든 그룹에 적용)
+      operationId: get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettingsResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 알림 설정
+      tags:
+      - notification-settings-controller
+    patch:
+      description: 보낸 값만 바꾼다. 시작과 끝 시각이 같으면 400
+      operationId: update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSettingsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettingsResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 알림 설정 바꾸기
+      tags:
+      - notification-settings-controller
   /api/v1/users/me/sessions:
     get:
       description: 최근 사용 순. current=true가 지금 기기
@@ -978,6 +1119,19 @@ components:
           - OWNER
         name:
           type: string
+    GroupPreferencesRequest:
+      type: object
+      properties:
+        notifMuted:
+          type: boolean
+          description: 이 그룹 알림 끄기
+      required:
+      - notifMuted
+    GroupPreferencesResponse:
+      type: object
+      properties:
+        notifMuted:
+          type: boolean
     GroupSummaryResponse:
       type: object
       properties:
@@ -1189,6 +1343,38 @@ components:
         unreadCount:
           type: integer
           format: int32
+    NotificationSettingsRequest:
+      type: object
+      properties:
+        previewHidden:
+          type: boolean
+          description: 알림에 메시지 내용을 보이지 않는다
+        quietEnd:
+          type: string
+          description: 방해 금지 끝
+          example: 07:00
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        quietHoursEnabled:
+          type: boolean
+          description: 방해 금지 시간 사용
+        quietStart:
+          type: string
+          description: 방해 금지 시작
+          example: 22:00
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+    NotificationSettingsResponse:
+      type: object
+      properties:
+        previewHidden:
+          type: boolean
+        quietEnd:
+          type: string
+          example: 07:00
+        quietHoursEnabled:
+          type: boolean
+        quietStart:
+          type: string
+          example: 22:00
     ReactionRequest:
       type: object
       properties:
@@ -1261,6 +1447,22 @@ components:
           minLength: 0
       required:
       - refreshToken
+    RegisterTokenRequest:
+      type: object
+      properties:
+        appVersion:
+          type: string
+          description: 앱 버전
+          example: 1.0.0
+          maxLength: 20
+          minLength: 0
+        token:
+          type: string
+          description: FCM 등록 토큰
+          maxLength: 512
+          minLength: 0
+      required:
+      - token
     ReplyPreview:
       type: object
       properties:

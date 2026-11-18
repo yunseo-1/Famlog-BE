@@ -9,6 +9,8 @@
 #
 # 미디어 S3: FAMLOG_MEDIA_S3_BUCKET=...  FAMLOG_MEDIA_S3_REGION=ap-northeast-2
 #   AWS S3는 endpoint 를 비우고 인스턴스 역할로 접근한다. S3 호환 저장소면 FAMLOG_MEDIA_S3_ENDPOINT·PUBLIC_ENDPOINT·ACCESS_KEY·SECRET_KEY
+#
+# 푸시 FCM: FAMLOG_PUSH_CREDENTIALS_PATH=/run/secrets/firebase-adminsdk.json (서비스 계정 키 파일, 이미지·저장소에 넣지 않는다)
 spring:
   datasource:
     url: ${DB_URL}

@@ -90,6 +90,13 @@ famlog:
     download-url-ttl: 10m
     # 사진 위치 저장. 위치기반서비스 신고를 확인하기 전까지 끈다 (사양서 8.6 출시 전 할 일)
     photo-location-enabled: false
+  # 푸시 (사양서 4.2 NOTI-01). FCM 서비스 계정 키 경로(famlog.push.credentials-path)는 환경별 설정에서 넣는다.
+  # 비어 있으면 보내지 않고 로그만 남긴다 (CI·테스트·키 없는 로컬)
+  push:
+    fcm-base-url: https://fcm.googleapis.com
+    connect-timeout: 3s
+    read-timeout: 10s
+    preview-max-length: 100
   # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
   consent:
     terms-version: "1.0"
