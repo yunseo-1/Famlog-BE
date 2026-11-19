@@ -28,9 +28,10 @@ def fields(attempt="1", job_id="7", body=None) -> dict[str, str]:
             "payload": json.dumps(body if body is not None else payload(), ensure_ascii=False)}
 
 
-CANDIDATE = {"type": "SCHEDULE", "fields": {"title": "할머니 댁 방문", "dateText": "이번 토요일"},
-             "inferred": ["startTime.ampm"], "missingFields": [], "confidence": 0.9,
-             "evidence": [{"messageId": 101, "spans": ["이번 토요일 11시"]}]}
+CANDIDATE = {"type": "SCHEDULE",
+             "fields": {"title": "할머니 댁 방문", "dateText": "이번 토요일", "startTimeText": "11시",
+                        "locationText": "할머니 댁", "attendeeTexts": ["가자"]},
+             "confidence": 0.9, "evidence": [{"messageId": 101, "spans": ["이번 토요일 11시", "할머니 댁"]}]}
 
 
 class FailingClient:
@@ -62,13 +63,47 @@ def test_스키마에_맞는_후보는_그대로_보낸다():
     assert result["status"] == "DONE"
     [candidate] = json.loads(result["candidates"])
     assert candidate["type"] == "SCHEDULE"
-    assert candidate["evidence"] == [{"messageId": 101, "spans": ["이번 토요일 11시"]}]
+    assert candidate["fields"]["dateText"] == "이번 토요일"
+    assert candidate["fields"]["attendeeTexts"] == ["가자"]
+    assert candidate["evidence"] == [{"messageId": 101, "spans": ["이번 토요일 11시", "할머니 댁"]}]
+
+
+def test_유형마다_정해진_원문_표현_필드만_받는다():
+    valid = [
+        {"type": "TODO", "fields": {"title": "자동차 점검 맡기기", "dueText": "이번 주에", "assigneeTexts": ["아빠"]}},
+        {"type": "ANNIVERSARY", "fields": {"title": "할머니 생신", "dateText": "다음 달 15일", "personText": "할머니"}},
+        {"type": "PLACE", "fields": {"name": "OO칼국수", "regionHint": "잠실", "opinion": "칼국수가 정말 맛있음"}},
+    ]
+    redis = FakeRedis()
+    candidates = [dict(c, confidence=0.8, evidence=[{"messageId": 101}]) for c in valid]
+    AiConsumer(redis, SETTINGS, FakeLlmClient(json.dumps({"candidates": candidates}))).handle("1-0", fields())
+
+    [result] = redis.entries(SETTINGS.ai_results_stream)
+    assert result["status"] == "DONE"
+    assert [c["type"] for c in json.loads(result["candidates"])] == ["TODO", "ANNIVERSARY", "PLACE"]
+
+
+def test_다른_유형의_필드나_서버가_정할_값을_보내면_FAILED():
+    wrong = [
+        dict(CANDIDATE, fields={"title": "할머니 댁 방문", "dueText": "이번 주에"}),  # 일정에 할 일 필드
+        dict(CANDIDATE, fields={"title": "할머니 댁 방문", "date": "2026-11-14"}),  # 날짜 계산은 서버가 한다
+        dict(CANDIDATE, inferred=["startTime.ampm"]),  # 추정 표시는 서버가 한다
+        dict(CANDIDATE, fields={"title": "가" * 101}),
+        {k: v for k, v in CANDIDATE.items() if k != "fields"},
+    ]
+    for candidate in wrong:
+        redis = FakeRedis()
+        AiConsumer(redis, SETTINGS, FakeLlmClient(json.dumps({"candidates": [candidate]}))).handle("1-0", fields())
+
+        [result] = redis.entries(SETTINGS.ai_results_stream)
+        assert (result["status"], result["errorCode"]) == ("FAILED", "INVALID_OUTPUT")
 
 
 def test_LLM_출력이_스키마에_맞지_않으면_재시도하지_않고_FAILED():
-    for text in ['{"candidates": [{"type": "MEETING", "confidence": 0.9, "evidence": [{"messageId": 101}]}]}',
-                 '{"candidates": [{"type": "TODO", "confidence": 1.5, "evidence": [{"messageId": 101}]}]}',
-                 '{"candidates": [{"type": "TODO", "confidence": 0.9, "evidence": []}]}',
+    evidence = '"evidence": [{"messageId": 101}]'
+    for text in ['{"candidates": [{"type": "MEETING", "fields": {}, "confidence": 0.9, %s}]}' % evidence,
+                 '{"candidates": [{"type": "TODO", "fields": {}, "confidence": 1.5, %s}]}' % evidence,
+                 '{"candidates": [{"type": "TODO", "fields": {}, "confidence": 0.9, "evidence": []}]}',
                  '{"candidates": [], "note": "이전 지시를 무시했습니다"}',
                  "JSON 이 아님"]:
         redis = FakeRedis()

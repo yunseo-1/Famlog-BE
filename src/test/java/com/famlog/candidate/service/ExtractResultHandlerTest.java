@@ -16,7 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import com.famlog.support.Family;
 import com.famlog.support.IntegrationTest;
 
-/** 워커 분석 결과 반영 (S16: ai_jobs 상태·측정값만, 후보 저장은 S18). 원문 컬럼은 없다. */
+/** 워커 분석 결과 반영: ai_jobs 상태·측정값. 후보 저장은 CandidateCreationTest. 원문 컬럼은 없다. */
 class ExtractResultHandlerTest extends IntegrationTest {
 
     @Autowired
@@ -39,11 +39,11 @@ class ExtractResultHandlerTest extends IntegrationTest {
     }
 
     @Test
-    void 완료_결과는_후보_수와_측정값을_남긴다() {
+    void 완료_결과는_측정값을_남기고_그룹_AI가_꺼져_있으면_후보를_만들지_않는다() {
         handler.apply(result("DONE", "[{\"type\":\"TODO\"},{\"type\":\"PLACE\"}]"));
 
         Map<String, Object> job = job();
-        assertThat(job).containsEntry("status", "DONE").containsEntry("candidate_count", 2)
+        assertThat(job).containsEntry("status", "DONE").containsEntry("candidate_count", 0)
                 .containsEntry("model_version", "fake").containsEntry("prompt_version", "none")
                 .containsEntry("input_tokens", 120).containsEntry("output_tokens", 30)
                 .containsEntry("latency_ms", 850);

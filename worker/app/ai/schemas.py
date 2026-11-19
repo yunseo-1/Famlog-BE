@@ -7,7 +7,7 @@
 """
 
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -52,22 +52,73 @@ class ExtractJob(_Model):
 
 class Evidence(_Model):
     message_id: int = Field(alias="messageId", gt=0)
-    spans: list[str] = Field(default_factory=list)
+    spans: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list, max_length=5)
 
 
-class Candidate(_Model):
-    """LLM 이 뽑은 원문 표현 (사양서 6.3). 날짜 계산·구성원 매칭·장소 확정은 API 가 한다. 세부 필드는 S18 에서 정한다"""
+_Text = Annotated[str, Field(max_length=100)]
+_Texts = Annotated[list[_Text], Field(max_length=10)]
 
-    type: Literal["SCHEDULE", "ANNIVERSARY", "TODO", "PLACE"]
-    fields: dict = Field(default_factory=dict)
-    inferred: list[str] = Field(default_factory=list)
-    missing_fields: list[str] = Field(alias="missingFields", default_factory=list)
+
+class ScheduleFields(_Model):
+    title: _Text | None = None
+    date_text: _Text | None = Field(alias="dateText", default=None)
+    start_time_text: _Text | None = Field(alias="startTimeText", default=None)
+    end_time_text: _Text | None = Field(alias="endTimeText", default=None)
+    location_text: _Text | None = Field(alias="locationText", default=None)
+    attendee_texts: _Texts = Field(alias="attendeeTexts", default_factory=list)
+
+
+class TodoFields(_Model):
+    title: _Text | None = None
+    due_text: _Text | None = Field(alias="dueText", default=None)
+    assignee_texts: _Texts = Field(alias="assigneeTexts", default_factory=list)
+
+
+class AnniversaryFields(_Model):
+    title: _Text | None = None
+    date_text: _Text | None = Field(alias="dateText", default=None)
+    person_text: _Text | None = Field(alias="personText", default=None)
+
+
+class PlaceFields(_Model):
+    name: _Text | None = None
+    region_hint: _Text | None = Field(alias="regionHint", default=None)
+    opinion: Annotated[str, Field(max_length=200)] | None = None
+
+
+class _Candidate(_Model):
+    """LLM 이 뽑은 원문 표현 (사양서 6.3). 날짜 계산·구성원 매칭·장소 확정·추정 표시는 API 가 한다 (S17·S18)"""
+
     confidence: float = Field(ge=0, le=1)
-    evidence: list[Evidence] = Field(min_length=1)
+    evidence: list[Evidence] = Field(min_length=1, max_length=10)
+
+
+class ScheduleCandidate(_Candidate):
+    type: Literal["SCHEDULE"]
+    fields: ScheduleFields
+
+
+class TodoCandidate(_Candidate):
+    type: Literal["TODO"]
+    fields: TodoFields
+
+
+class AnniversaryCandidate(_Candidate):
+    type: Literal["ANNIVERSARY"]
+    fields: AnniversaryFields
+
+
+class PlaceCandidate(_Candidate):
+    type: Literal["PLACE"]
+    fields: PlaceFields
+
+
+Candidate = Annotated[ScheduleCandidate | TodoCandidate | AnniversaryCandidate | PlaceCandidate,
+                      Field(discriminator="type")]
 
 
 class LlmOutput(_Model):
-    candidates: list[Candidate]
+    candidates: list[Candidate] = Field(max_length=20)
 
 
 class ExtractResult(BaseModel):

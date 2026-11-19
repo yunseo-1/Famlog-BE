@@ -336,6 +336,42 @@ class FlywayMigrationTest extends IntegrationTest {
                 roomId)).isZero();
     }
 
+    @Test
+    void V10_정의되지_않은_후보_유형은_저장되지_않는다() {
+        long[] room = insertGroupRoom();
+        long jobId = jdbcTemplate.queryForObject(AI_JOB_INSERT + " RETURNING id", Long.class, room[0], room[1], 0, 3,
+                "DONE");
+
+        assertThat(jdbcTemplate.update(CANDIDATE_INSERT, room[0], room[1], jobId, "TODO", 0.9)).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(CANDIDATE_INSERT, room[0], room[1], jobId, "MEETING", 0.9))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V10_신뢰도_0_5_미만_후보는_저장되지_않는다() {
+        long[] room = insertGroupRoom();
+        long jobId = jdbcTemplate.queryForObject(AI_JOB_INSERT + " RETURNING id", Long.class, room[0], room[1], 0, 3,
+                "DONE");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(CANDIDATE_INSERT, room[0], room[1], jobId, "TODO", 0.4))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V10_후보는_PENDING으로_시작한다() {
+        long[] room = insertGroupRoom();
+        long jobId = jdbcTemplate.queryForObject(AI_JOB_INSERT + " RETURNING id", Long.class, room[0], room[1], 0, 3,
+                "DONE");
+
+        jdbcTemplate.update(CANDIDATE_INSERT, room[0], room[1], jobId, "PLACE", 0.8);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM registration_candidates WHERE job_id = ?",
+                String.class, jobId)).isEqualTo("PENDING");
+    }
+
+    private static final String CANDIDATE_INSERT = "INSERT INTO registration_candidates (group_id, room_id, job_id, "
+            + "type, fields, confidence, dedup_key, expires_at) VALUES (?, ?, ?, ?, '{}', ?, 'k', now())";
+
     private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
             + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
 
