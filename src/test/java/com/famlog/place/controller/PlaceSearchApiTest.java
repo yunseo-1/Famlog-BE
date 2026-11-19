@@ -73,6 +73,21 @@ class PlaceSearchApiTest extends IntegrationTest {
     }
 
     @Test
+    void 문화시설은_기타로_관광명소와_숙박은_여행지로_제안한다() throws Exception {
+        Document cinema = doc("CGV 강변", "CT1", "서울 광진구 구의동 546-4", 37.5357, 127.0959);
+        Document palace = doc("경복궁", "AT4", "서울 종로구 세종로 1-1", 37.5796, 126.977);
+        Document hotel = doc("어느 호텔", "AD5", "서울 중구 소공동 1", 37.5651, 126.981);
+        String query = newQuery();
+        kakao.register(query, false, cinema, palace, hotel);
+
+        search(mockMvc, family.mom(), query)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].suggestedCategory").value("ETC"))
+                .andExpect(jsonPath("$.items[1].suggestedCategory").value("TRAVEL"))
+                .andExpect(jsonPath("$.items[2].suggestedCategory").value("TRAVEL"));
+    }
+
+    @Test
     void 위치_없는_검색은_목록을_캐시하고_위치가_있는_검색은_캐시하지_않고_위치_이용을_기록한다() throws Exception {
         String query = newQuery();
         Document doc = doc("동네 분식", "FD6", "서울 송파구 잠실동 1", 37.51, 127.1);
