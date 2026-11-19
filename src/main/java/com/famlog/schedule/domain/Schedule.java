@@ -96,15 +96,16 @@ public class Schedule extends BaseTimeEntity {
     }
 
     public Schedule(long groupId, long createdBy, String title, Timing timing, Recurrence recurrence, String memo,
-            List<Reminder> reminders, Set<Long> participantIds) {
+            List<Reminder> reminders, Set<Long> participantIds, Long placeId) {
         this.groupId = groupId;
         this.createdBy = createdBy;
-        update(title, timing, recurrence, memo, reminders, participantIds);
+        update(title, timing, recurrence, memo, reminders, participantIds, placeId);
     }
 
     public void update(String title, Timing timing, Recurrence recurrence, String memo, List<Reminder> reminders,
-            Set<Long> participantIds) {
+            Set<Long> participantIds, Long placeId) {
         this.title = title;
+        this.placeId = placeId;
         this.startsAt = timing.startsAt();
         this.endsAt = timing.endsAt();
         this.allDay = timing.allDay();

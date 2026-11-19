@@ -90,8 +90,11 @@ class PushComposer {
         if (message.getType() == MessageType.IMAGE || message.getType() == MessageType.VIDEO) {
             common.put(PushData.MEDIA_COUNT, Integer.toString(payload(message).path("mediaIds").size()));
         }
-        String preview = message.getType() == MessageType.TEXT || message.getType() == MessageType.SYSTEM
-                ? truncate(message.getBody()) : null;
+        String preview = switch (message.getType()) {
+            case TEXT, SYSTEM -> truncate(message.getBody());
+            case PLACE -> truncate("장소를 공유했어요: " + message.getBody());
+            default -> null;
+        };
 
         Map<Long, NotificationSettings> settings = settingsOf(recipients);
         LocalTime now = seoulNow();

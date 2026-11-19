@@ -26,6 +26,8 @@ public enum ErrorCode {
     VERSION_CONFLICT(HttpStatus.CONFLICT, "다른 가족이 먼저 수정했어요. 새로고침 후 다시 시도해 주세요."),
     GROUP_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "가족 그룹 인원 또는 개수 제한을 넘었어요."),
     OWNER_TRANSFER_REQUIRED(HttpStatus.CONFLICT, "다른 가족에게 그룹장을 넘긴 뒤 나갈 수 있어요."),
+    PLACE_ALREADY_SHARED(HttpStatus.CONFLICT, "이미 우리 가족이 공유한 장소예요."),
+    ALIAS_DUPLICATED(HttpStatus.CONFLICT, "이미 있는 별칭이에요."),
     INVITE_EXPIRED(HttpStatus.GONE, "만료된 초대 코드예요."),
     CANDIDATE_MISSING_FIELDS(HttpStatus.UNPROCESSABLE_CONTENT, "필수 항목을 채워 주세요."),
     UPGRADE_REQUIRED(HttpStatus.UPGRADE_REQUIRED, "앱을 최신 버전으로 업데이트해 주세요."),

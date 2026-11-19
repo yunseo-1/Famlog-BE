@@ -545,6 +545,328 @@ paths:
       summary: 메시지 내역
       tags:
       - chat-controller
+  /api/v1/groups/{groupId}/place-aliases:
+    get:
+      description: 별칭 이름 순
+      operationId: listPlaceAliases
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AliasListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 별칭 장소 목록
+      tags:
+      - place-alias-controller
+    post:
+      description: '"할머니 댁"처럼 검색이 안 되는 곳. 공유한 장소 연결·주소 메모는 선택. 같은 별칭이 있으면 409 ALIAS_DUPLICATED'
+      operationId: createPlaceAlias
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAliasRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AliasResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 별칭 장소 만들기
+      tags:
+      - place-alias-controller
+  /api/v1/groups/{groupId}/place-aliases/{aliasId}:
+    delete:
+      description: 만든 사람이나 ADMIN 이상. 다른 그룹 별칭이면 404
+      operationId: deletePlaceAlias
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: path
+        name: aliasId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 별칭 장소 삭제
+      tags:
+      - place-alias-controller
+  /api/v1/groups/{groupId}/places:
+    get:
+      description: "최신 공유 순, 커서 페이징. region1(시·도)·region2(시·군·구, region1 필요), sharedBy·\
+        category(여러 개), 지도 영역(swLat·swLng·neLat·neLng 모두)을 함께 걸 수 있다"
+      operationId: listPlaces
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: region1
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: region2
+        required: false
+        schema:
+          type: string
+      - description: 공유한 사람 userId 여러 개
+        in: query
+        name: sharedBy
+        required: false
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int64
+          uniqueItems: true
+      - in: query
+        name: category
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - RESTAURANT
+            - CAFE
+            - TRAVEL
+            - LIFE
+            - ETC
+          uniqueItems: true
+      - in: query
+        name: swLat
+        required: false
+        schema:
+          type: number
+          format: double
+      - in: query
+        name: swLng
+        required: false
+        schema:
+          type: number
+          format: double
+      - in: query
+        name: neLat
+        required: false
+        schema:
+          type: number
+          format: double
+      - in: query
+        name: neLng
+        required: false
+        schema:
+          type: number
+          format: double
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          maximum: 100
+          minimum: 1
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 목록
+      tags:
+      - place-controller
+    post:
+      description: "검색 결과의 kakaoPlaceId 로 공유한다 (검색 후 1시간 안, 지나면 400). 같은 그룹에 이미 있으\
+        면 409 PLACE_ALREADY_SHARED. shareToChat(기본 true)이면 채팅방에 장소 카드(PLACE)"
+      operationId: sharePlace
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SharePlaceRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 공유
+      tags:
+      - place-controller
+  /api/v1/groups/{groupId}/places/nearby:
+    get:
+      description: 가까운 순 최대 50곳. 현재 위치는 저장하지 않는다. 기능이 꺼져 있으면 404 (앱은 버튼을 숨긴다)
+      operationId: nearbyPlaces
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: lat
+        required: true
+        schema:
+          type: number
+          format: double
+          maximum: 90.0
+          minimum: -90.0
+      - in: query
+        name: lng
+        required: true
+        schema:
+          type: number
+          format: double
+          maximum: 180.0
+          minimum: -180.0
+      - in: query
+        name: radiusKm
+        required: false
+        schema:
+          type: number
+          format: double
+          default: 3.0
+          maximum: 20.0
+          minimum: 1.0
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearbyListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 주변 장소
+      tags:
+      - place-controller
+  /api/v1/groups/{groupId}/places/regions:
+    get:
+      description: 시·도 → 시·군·구 배지. sharedBy·category 를 목록과 같이 걸 수 있다
+      operationId: placeRegions
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: sharedBy
+        required: false
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int64
+          uniqueItems: true
+      - in: query
+        name: category
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - RESTAURANT
+            - CAFE
+            - TRAVEL
+            - LIFE
+            - ETC
+          uniqueItems: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionCountResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 지역별 장소 개수
+      tags:
+      - place-controller
   /api/v1/groups/{groupId}/read:
     put:
       description: "앞으로만 움직인다. 바뀌면 그룹에 read.updated 이벤트. STOMP /pub/groups/{groupId}/read\
@@ -1030,6 +1352,219 @@ paths:
       summary: 내 공감 취소
       tags:
       - message-controller
+  /api/v1/places/search:
+    get:
+      description: 한 쪽 15개. x·y(현재 위치나 지도 중심)를 주면 가까운 순. groupId 를 주면 그 그룹에 이미 공유된
+        장소에 sharedPlaceId 를 넣는다. 사용자당 분당 30회
+      operationId: searchPlaces
+      parameters:
+      - in: query
+        name: query
+        required: true
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 0
+      - description: 경도
+        in: query
+        name: x
+        required: false
+        schema:
+          type: number
+          format: double
+          maximum: 180.0
+          minimum: -180.0
+      - description: 위도
+        in: query
+        name: "y"
+        required: false
+        schema:
+          type: number
+          format: double
+          maximum: 90.0
+          minimum: -90.0
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 1
+          maximum: 45
+          minimum: 1
+      - in: query
+        name: groupId
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 검색 (카카오 로컬)
+      tags:
+      - place-controller
+  /api/v1/places/{placeId}:
+    delete:
+      description: "공유한 사람이나 ADMIN 이상. 일정·별칭의 연결은 비워지고, 채팅 카드는 남는다"
+      operationId: deletePlace
+      parameters:
+      - in: path
+        name: placeId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 삭제
+      tags:
+      - place-controller
+    get:
+      description: 다른 그룹 장소면 404
+      operationId: getPlace
+      parameters:
+      - in: path
+        name: placeId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 하나
+      tags:
+      - place-controller
+    patch:
+      description: category·oneLineReview·rating 중 보낸 키만 바뀐다 (oneLineReview·rating
+        은 null 이면 지운다). 공유한 사람이나 ADMIN 이상 (403)
+      operationId: updatePlace
+      parameters:
+      - in: path
+        name: placeId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlaceRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 장소 수정
+      tags:
+      - place-controller
+  /api/v1/places/{placeId}/marks/{kind}:
+    delete:
+      description: 내 표시를 끈다 (이미 꺼져 있어도 200)
+      operationId: unmarkPlace
+      parameters:
+      - in: path
+        name: placeId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+          enum:
+          - VISITED
+          - WANT
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceMarksResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 다녀옴·가고 싶어요 해제
+      tags:
+      - place-controller
+    put:
+      description: 내 표시를 켠다 (이미 켜져 있어도 200)
+      operationId: markPlace
+      parameters:
+      - in: path
+        name: placeId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+          enum:
+          - VISITED
+          - WANT
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceMarksResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 다녀옴·가고 싶어요 표시
+      tags:
+      - place-controller
   /api/v1/schedules/{scheduleId}:
     delete:
       description: 반복 일정은 시리즈 전체를 지운다. MEMBER 는 본인이 등록한 일정만
@@ -1444,6 +1979,32 @@ components:
       required:
       - privacyVersion
       - termsVersion
+    AliasListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AliasResponse"
+    AliasResponse:
+      type: object
+      properties:
+        addressText:
+          type: string
+        alias:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        place:
+          $ref: "#/components/schemas/PlaceSummary"
+          description: 연결한 장소 (없거나 지워졌으면 null)
     AuthResponse:
       type: object
       properties:
@@ -1491,6 +2052,25 @@ components:
           items:
             type: integer
             format: int64
+    CreateAliasRequest:
+      type: object
+      properties:
+        addressText:
+          type: string
+          description: 주소 메모 (선택)
+          maxLength: 200
+          minLength: 0
+        alias:
+          type: string
+          example: 할머니 댁
+          maxLength: 30
+          minLength: 0
+        placeId:
+          type: integer
+          format: int64
+          description: "연결할 공유 장소 (이 그룹 장소, 선택)"
+      required:
+      - alias
     CreateGroupRequest:
       type: object
       properties:
@@ -1575,6 +2155,8 @@ components:
           - VERSION_CONFLICT
           - GROUP_LIMIT_EXCEEDED
           - OWNER_TRANSFER_REQUIRED
+          - PLACE_ALREADY_SHARED
+          - ALIAS_DUPLICATED
           - INVITE_EXPIRED
           - CANDIDATE_MISSING_FIELDS
           - UPGRADE_REQUIRED
@@ -1856,6 +2438,21 @@ components:
         unreadCount:
           type: integer
           format: int32
+    NearbyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearbyPlaceResponse"
+    NearbyPlaceResponse:
+      type: object
+      properties:
+        distanceM:
+          type: integer
+          format: int64
+        place:
+          $ref: "#/components/schemas/PlaceResponse"
     NotificationSettingsRequest:
       type: object
       properties:
@@ -1927,6 +2524,103 @@ components:
           type: string
           format: date-time
         title:
+          type: string
+    PlaceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaceResponse"
+        nextCursor:
+          type: string
+    PlaceMarksResponse:
+      type: object
+      properties:
+        visited:
+          type: array
+          items:
+            type: integer
+            format: int64
+        want:
+          type: array
+          items:
+            type: integer
+            format: int64
+    PlaceResponse:
+      type: object
+      properties:
+        address:
+          type: string
+        category:
+          type: string
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+        categoryDetail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        groupId:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        kakaoPlaceId:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        marks:
+          $ref: "#/components/schemas/PlaceMarksResponse"
+        name:
+          type: string
+        oneLineReview:
+          type: string
+        phone:
+          type: string
+        placeUrl:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        region1:
+          type: string
+        region2:
+          type: string
+        region3:
+          type: string
+        sharedBy:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+    PlaceSummary:
+      type: object
+      properties:
+        address:
+          type: string
+        category:
+          type: string
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+        id:
+          type: integer
+          format: int64
+        name:
           type: string
     ReactionRequest:
       type: object
@@ -2000,6 +2694,36 @@ components:
           minLength: 0
       required:
       - refreshToken
+    Region1Count:
+      type: object
+      properties:
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Region2Count"
+        count:
+          type: integer
+          format: int64
+        region1:
+          type: string
+    Region2Count:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        region2:
+          type: string
+    RegionCountResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Region1Count"
+        total:
+          type: integer
+          format: int64
     RegisterTokenRequest:
       type: object
       properties:
@@ -2072,6 +2796,10 @@ components:
           maxItems: 20
           minItems: 0
           uniqueItems: true
+        placeId:
+          type: integer
+          format: int64
+          description: 연결할 장소 (이 그룹에 공유한 장소). 수정할 때 빼면 연결을 비운다
         reminders:
           type: array
           description: "리마인드. 보내지 않으면 기본값(시간 일정: 전날 20:00 + 1시간 전, 종일: 전날 20:00),\
@@ -2146,6 +2874,9 @@ components:
           items:
             type: integer
             format: int64
+        place:
+          $ref: "#/components/schemas/PlaceSummary"
+          description: 연결한 장소 (없거나 장소가 지워졌으면 null)
         reminders:
           type: array
           items:
@@ -2173,6 +2904,61 @@ components:
         version:
           type: integer
           format: int64
+    SearchItem:
+      type: object
+      properties:
+        address:
+          type: string
+          description: "도로명 주소, 없으면 지번 주소"
+        categoryDetail:
+          type: string
+          description: "카카오 세부 분류 (예: 냉면)"
+        distanceM:
+          type: integer
+          format: int32
+          description: x·y 로 검색했을 때 거리(m)
+        kakaoPlaceId:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        name:
+          type: string
+        phone:
+          type: string
+        placeUrl:
+          type: string
+        region1:
+          type: string
+        region2:
+          type: string
+        region3:
+          type: string
+        sharedPlaceId:
+          type: integer
+          format: int64
+          description: groupId 를 주었고 그 그룹에 이미 공유된 장소면 그 id
+        suggestedCategory:
+          type: string
+          description: 카카오 분류로 고른 카테고리 (공유할 때 바꿀 수 있다)
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+    SearchResponse:
+      type: object
+      properties:
+        hasMore:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchItem"
     SessionResponse:
       type: object
       properties:
@@ -2194,6 +2980,39 @@ components:
         sessionId:
           type: integer
           format: int64
+    SharePlaceRequest:
+      type: object
+      properties:
+        category:
+          type: string
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+        kakaoPlaceId:
+          type: string
+          description: 검색 결과의 kakaoPlaceId (검색 후 1시간 안에 공유)
+          maxLength: 30
+          minLength: 0
+        oneLineReview:
+          type: string
+          description: 한줄평
+          maxLength: 100
+          minLength: 0
+        rating:
+          type: integer
+          format: int32
+          description: 별점 1~5 (선택)
+          maximum: 5
+          minimum: 1
+        shareToChat:
+          type: boolean
+          description: 채팅방에 장소 카드로 올린다 (기본 true)
+      required:
+      - category
+      - kakaoPlaceId
     SignupRequest:
       type: object
       properties:
@@ -2310,6 +3129,31 @@ components:
           description: "호칭 (큰아들, 막내)"
           maxLength: 20
           minLength: 0
+    UpdatePlaceRequest:
+      type: object
+      properties:
+        category:
+          type: string
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+        oneLineReview:
+          type:
+          - string
+          - "null"
+          description: null 이면 지운다
+          maxLength: 100
+          minLength: 0
+        rating:
+          type:
+          - string
+          - "null"
+          description: "1~5, null 이면 지운다"
+          maximum: 5
+          minimum: 1
     UpdateTodoRequest:
       type: object
       properties:

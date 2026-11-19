@@ -14,12 +14,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.famlog.support.Family;
+import com.famlog.support.FakeKakaoLocalClient;
 import com.famlog.support.GroupApi;
 import com.famlog.support.IntegrationTest;
+import com.famlog.support.PlaceApi;
 import com.famlog.support.ScheduleApi;
 
 /** 일정 등록·수정·삭제 (사양서 4.3 SCH-01, 2.2 권한, 9.3 인가, 11.2 VERSION_CONFLICT). */
@@ -27,11 +30,40 @@ class ScheduleApiTest extends IntegrationTest {
 
     private static final String ONE = "/api/v1/schedules/{id}";
 
+    @Autowired
+    FakeKakaoLocalClient kakao;
+
     private Family family;
 
     @BeforeEach
     void setUp() throws Exception {
         family = Family.create(mockMvc, this::createUser);
+    }
+
+    @Test
+    void 우리_가족이_공유한_장소를_연결하고_수정할_때_빼면_연결을_비운다() throws Exception {
+        long placeId = PlaceApi.shareNew(mockMvc, kakao, family.groupId(), family.dad(),
+                PlaceApi.doc("동네 병원", "HP8", "서울 송파구 잠실동 1", 37.51, 127.1), "LIFE");
+        String body = timed("소아과", "2026-11-21T10:00", "2026-11-21T11:00", family.son());
+
+        long id = ScheduleApi.create(mockMvc, family.groupId(), family.mom(), with(body, "\"placeId\":" + placeId));
+        mockMvc.perform(get(ONE, id).with(asUser(family.son())))
+                .andExpect(jsonPath("$.place.id").value(placeId))
+                .andExpect(jsonPath("$.place.name").value("동네 병원"))
+                .andExpect(jsonPath("$.place.address").value("서울 송파구 잠실동 1"))
+                .andExpect(jsonPath("$.place.category").value("LIFE"));
+        update(id, family.mom(), with(body, "\"version\":0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.place").doesNotExist());
+
+        long stranger = createUser();
+        long otherGroup = GroupApi.createGroup(mockMvc, stranger, "다른 가족");
+        long otherPlace = PlaceApi.shareNew(mockMvc, kakao, otherGroup, stranger,
+                PlaceApi.doc("남의 병원", "HP8", "서울 송파구 잠실동 2", 37.51, 127.1), "LIFE");
+        ScheduleApi.post(mockMvc, family.groupId(), family.mom(), with(body, "\"placeId\":" + otherPlace))
+                .andExpect(status().isBadRequest());
+        ScheduleApi.post(mockMvc, family.groupId(), family.mom(), with(body, "\"placeId\":999999999"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 
+import com.famlog.place.dto.PlaceDtos.PlaceSummary;
 import com.famlog.schedule.domain.Holiday;
 import com.famlog.schedule.domain.Reminder;
 import com.famlog.schedule.domain.Schedule;
@@ -42,7 +43,8 @@ public final class ScheduleDtos {
             @Schema(description = "리마인드. 보내지 않으면 기본값(시간 일정: 전날 20:00 + 1시간 전, 종일: 전날 20:00), "
                     + "빈 배열이면 알림 없음. 종일 일정은 PREV_DAY_20만")
             @Size(max = Reminder.MAX_PER_SCHEDULE) List<@NotNull Reminder> reminders,
-            @Schema(description = "수정할 때 필수: 조회한 일정의 version (다르면 409 VERSION_CONFLICT)") Long version) {
+            @Schema(description = "수정할 때 필수: 조회한 일정의 version (다르면 409 VERSION_CONFLICT)") Long version,
+            @Schema(description = "연결할 장소 (이 그룹에 공유한 장소). 수정할 때 빼면 연결을 비운다") Long placeId) {
     }
 
     /** 일정 하나 (시리즈) */
@@ -50,16 +52,17 @@ public final class ScheduleDtos {
             Instant endsAt,
             @Schema(description = "종일 일정의 첫날 (시간 일정이면 null)") LocalDate startDate,
             @Schema(description = "종일 일정의 마지막 날 (포함)") LocalDate endDate,
-            List<Long> participantIds, String rrule, String memo, List<Reminder> reminders, long createdBy,
+            List<Long> participantIds, String rrule, String memo, List<Reminder> reminders,
+            @Schema(description = "연결한 장소 (없거나 장소가 지워졌으면 null)") PlaceSummary place, long createdBy,
             long version, Instant createdAt, Instant updatedAt) {
 
-        public static ScheduleResponse from(Schedule schedule) {
+        public static ScheduleResponse from(Schedule schedule, PlaceSummary place) {
             return new ScheduleResponse(schedule.getId(), schedule.getGroupId(), schedule.getTitle(),
                     schedule.isAllDay(), schedule.getStartsAt(), schedule.getEndsAt(),
                     firstDay(schedule, schedule.getStartsAt()), lastDay(schedule, schedule.getEndsAt()),
                     sorted(schedule.getParticipantIds()), schedule.getRrule(), schedule.getMemo(),
-                    schedule.reminderList(), schedule.getCreatedBy(), schedule.getVersion(), schedule.getCreatedAt(),
-                    schedule.getUpdatedAt());
+                    schedule.reminderList(), place, schedule.getCreatedBy(), schedule.getVersion(),
+                    schedule.getCreatedAt(), schedule.getUpdatedAt());
         }
     }
 

@@ -48,7 +48,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 채팅 쓰기 (사양서 4.2 CHAT-02·04·06).
  * <ul>
- * <li>전송: TEXT·IMAGE(사진 묶음)·VIDEO. 방 행을 잠그고 seq를 매긴다 → 같은 방 안에서 겹침·빠짐 없이 순서가 정해진다.
+ * <li>전송: TEXT·IMAGE(사진 묶음)·VIDEO. 장소 카드(PLACE)는 장소 공유 API 가 올린다. 방 행을 잠그고 seq를 매긴다 → 같은 방 안에서 겹침·빠짐 없이 순서가 정해진다.
  * 같은 사람이 같은 clientMessageId로 다시 보내면 저장된 메시지를 돌려준다 (중복 저장 없음)</li>
  * <li>실시간 이벤트는 커밋 뒤 ChatRelay로 모든 서버에 보낸다. 푸시는 MessagePosted 로 NOTI가 보낸다</li>
  * <li>메시지 id만 있는 API(/messages/{id})는 다른 그룹이거나 입장 전 메시지면 404 (존재 여부 숨김, 사양서 9.3)</li>
@@ -112,6 +112,31 @@ public class ChatService {
                 : Message.media(room.getId(), seq, userId, clientId, type,
                         jsonMapper.writeValueAsString(Map.of("mediaIds", mediaIds)), request.replyToId()));
         media.forEach(asset -> asset.attachTo(message.getId()));
+        return new SendResult(publish(groupId, userId, me, message), false);
+    }
+
+    // --- PLC-01 장소 카드 ---
+
+    /**
+     * 장소 공유 카드(PLACE)를 올린다. 장소 공유 트랜잭션 안에서 부른다 (공유가 실패하면 카드도 남지 않게).
+     *
+     * @param placeName 본문 (답장 미리보기·푸시에 쓴다)
+     * @param payload   공유한 순간의 장소 요약 {placeId, name, category, ...}
+     */
+    @Transactional
+    public MessageResponse postPlace(long groupId, long userId, String placeName, Map<String, Object> payload) {
+        ChatRoom room = roomRepository.findByGroupIdForUpdate(groupId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        GroupMember me = memberRepository.findActiveForUpdate(groupId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_MEMBER));
+        Message message = messageRepository.save(Message.place(room.getId(), room.allocateSeq(), userId, placeName,
+                jsonMapper.writeValueAsString(payload)));
+        return publish(groupId, userId, me, message);
+    }
+
+    /** 저장한 메시지를 그룹에 알리고, 보낸 사람은 그때까지 읽은 것으로 한다 */
+    private MessageResponse publish(long groupId, long userId, GroupMember me, Message message) {
+        long seq = message.getSeq();
         long readBefore = me.markReadUpTo(seq);
         messageRepository.flush();
 
@@ -122,7 +147,7 @@ public class ChatService {
             relay.toGroup(groupId, ChatEvent.READ_UPDATED, new ReadUpdated(groupId, userId, readBefore, seq));
         }
         events.publishEvent(new MessagePosted(groupId, message.getId()));
-        return new SendResult(response, false);
+        return response;
     }
 
     /** TEXT는 본문, IMAGE는 사진 1~30개, VIDEO는 동영상 1개 */
