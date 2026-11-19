@@ -1,5 +1,7 @@
 package com.famlog.common.error;
 
+import java.util.List;
+
 import lombok.Getter;
 
 /**
@@ -11,12 +13,20 @@ public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
 
+    /** 응답 fieldErrors (예: 후보의 채워야 할 항목). 없으면 null */
+    private final List<ErrorResponse.FieldError> fieldErrors;
+
     public BusinessException(ErrorCode errorCode) {
         this(errorCode, errorCode.getMessage());
     }
 
     public BusinessException(ErrorCode errorCode, String message) {
+        this(errorCode, message, null);
+    }
+
+    public BusinessException(ErrorCode errorCode, String message, List<ErrorResponse.FieldError> fieldErrors) {
         super(message);
         this.errorCode = errorCode;
+        this.fieldErrors = fieldErrors;
     }
 }

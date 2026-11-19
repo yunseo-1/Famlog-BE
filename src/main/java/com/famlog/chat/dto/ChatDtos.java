@@ -101,7 +101,8 @@ public final class ChatDtos {
     // --- 실시간 이벤트 ---
 
     /**
-     * /sub/groups/{groupId}: message.created, message.deleted, read.updated, reaction.updated, media.updated
+     * /sub/groups/{groupId}: message.created, message.deleted, read.updated, reaction.updated, media.updated,
+     * candidate.created, candidate.resolved
      * /user/queue/events: message.created(재전송 확인), error, session.revoked
      */
     public record ChatEvent(String type, Object data) {
@@ -110,6 +111,10 @@ public final class ChatDtos {
         public static final String MESSAGE_DELETED = "message.deleted";
         public static final String READ_UPDATED = "read.updated";
         public static final String REACTION_UPDATED = "reaction.updated";
+        /** AI 등록 후보가 생겼다 (사양서 11.4). data = 후보 (CandidateResponse) */
+        public static final String CANDIDATE_CREATED = "candidate.created";
+        /** 후보가 승인·무시·되돌려졌다. data = CandidateResolved */
+        public static final String CANDIDATE_RESOLVED = "candidate.resolved";
         public static final String ERROR = "error";
         public static final String SESSION_REVOKED = "session.revoked";
     }

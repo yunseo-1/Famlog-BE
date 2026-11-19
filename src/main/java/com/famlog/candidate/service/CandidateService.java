@@ -22,9 +22,12 @@ import com.famlog.candidate.dto.ExtractDtos.ExtractedEvidence;
 import com.famlog.candidate.normalize.MemberMatcher;
 import com.famlog.candidate.repository.AiSourceReader;
 import com.famlog.candidate.repository.CandidateEvidenceWriter;
+import com.famlog.candidate.repository.CandidateEvidenceWriter.Anchor;
 import com.famlog.candidate.repository.CandidateEvidenceWriter.EvidenceMessage;
 import com.famlog.candidate.repository.RegistrationCandidateRepository;
 import com.famlog.candidate.service.CandidateBuilder.Built;
+import com.famlog.chat.dto.ChatDtos.ChatEvent;
+import com.famlog.chat.relay.ChatRelay;
 import com.famlog.place.repository.PlaceAliasRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -41,6 +44,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>중복: 같은 dedupKey 의 가장 최근 후보가 PENDING(만료 전)·APPROVED 면 근거만 붙이고, DISMISSED 면 만들지 않는다.
  * EXPIRED·UNDONE·만료된 PENDING 이면 새로 만든다</li>
  * <li>같은 그룹의 저장은 한 번에 하나씩 (DB advisory lock)</li>
+ * <li>새로 만든 후보는 커밋 뒤 그룹에 candidate.created 로 알린다 (카드는 마지막 근거 메시지 아래)</li>
  * </ul>
  * 후보 내용은 로그에 남기지 않는다 (개수만).
  */
@@ -56,6 +60,8 @@ public class CandidateService {
     private final PlaceAliasRepository aliasRepository;
     private final JsonMapper jsonMapper;
     private final Clock clock;
+    private final CandidateMapper mapper;
+    private final ChatRelay relay;
 
     /**
      * @param usage 이 결과를 낸 모델·프롬프트 버전 (후보에 남긴다)
@@ -92,7 +98,7 @@ public class CandidateService {
                 skipped++;
                 continue;
             }
-            switch (save(job, usage, built.get(), candidate.evidence(), context.now())) {
+            switch (save(job, usage, built.get(), candidate.evidence(), evidence.getLast(), context.now())) {
                 case CREATED -> created++;
                 case MERGED -> merged++;
                 case SKIPPED -> skipped++;
@@ -106,7 +112,8 @@ public class CandidateService {
         CREATED, MERGED, SKIPPED
     }
 
-    private Outcome save(AiJob job, AiJob.Usage usage, Built built, List<ExtractedEvidence> evidence, Instant now) {
+    private Outcome save(AiJob job, AiJob.Usage usage, Built built, List<ExtractedEvidence> evidence,
+            EvidenceMessage anchor, Instant now) {
         Optional<RegistrationCandidate> latest = candidateRepository
                 .findFirstByGroupIdAndDedupKeyOrderByIdDesc(job.getGroupId(), built.dedupKey());
         if (latest.isPresent()) {
@@ -123,6 +130,8 @@ public class CandidateService {
                 usage, built.type(), jsonMapper.writeValueAsString(built.fields()), built.inferred(), built.missing(),
                 built.confidence(), built.dedupKey(), built.expiresAt()));
         addEvidence(candidate.getId(), evidence);
+        relay.toGroup(job.getGroupId(), ChatEvent.CANDIDATE_CREATED,
+                mapper.toResponse(candidate, new Anchor(anchor.id(), anchor.seq())));
         return Outcome.CREATED;
     }
 

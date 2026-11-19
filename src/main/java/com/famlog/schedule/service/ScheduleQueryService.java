@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
@@ -16,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
+import com.famlog.common.source.SourceRef;
 import com.famlog.common.time.FamlogTime;
 import com.famlog.group.domain.FamilyRole;
 import com.famlog.group.domain.GroupMember;
@@ -46,6 +49,7 @@ public class ScheduleQueryService {
     private final ScheduleRepository scheduleRepository;
     private final GroupMemberRepository memberRepository;
     private final GroupAccessChecker accessChecker;
+    private final ItemSources itemSources;
 
     @Transactional(readOnly = true)
     public OccurrenceListResponse list(long groupId, long userId, LocalDate from, LocalDate to, Set<Long> memberIds,
@@ -59,11 +63,15 @@ public class ScheduleQueryService {
         Set<Long> wanted = wantedMembers(groupId, memberIds, roles);
 
         List<OccurrenceResponse> items = new ArrayList<>();
-        for (Schedule schedule : scheduleRepository.findCandidates(groupId, start, end)) {
+        List<Schedule> schedules = scheduleRepository.findCandidates(groupId, start, end);
+        Map<Long, SourceRef> sources = itemSources.find(ItemSources.SCHEDULE,
+                schedules.stream().map(Schedule::getId).toList());
+        for (Schedule schedule : schedules) {
             if (wanted != null && schedule.getParticipantIds().stream().noneMatch(wanted::contains)) {
                 continue;
             }
-            schedule.occurrenceStarts(start, end).forEach(at -> items.add(OccurrenceResponse.of(schedule, at)));
+            SourceRef source = sources.get(schedule.getId());
+            schedule.occurrenceStarts(start, end).forEach(at -> items.add(OccurrenceResponse.of(schedule, at, source)));
         }
         items.sort(Comparator.comparing(OccurrenceResponse::startsAt).thenComparing(OccurrenceResponse::scheduleId));
         return new OccurrenceListResponse(items);

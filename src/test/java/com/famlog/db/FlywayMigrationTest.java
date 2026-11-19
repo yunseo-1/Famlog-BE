@@ -377,6 +377,34 @@ class FlywayMigrationTest extends IntegrationTest {
         assertThat(columns).contains("cache_read_tokens", "cache_write_tokens");
     }
 
+    @Test
+    void V12_정의되지_않은_처리_기록과_무시_사유는_저장되지_않는다() {
+        long[] room = insertGroupRoom();
+        long jobId = jdbcTemplate.queryForObject(AI_JOB_INSERT + " RETURNING id", Long.class, room[0], room[1], 0, 3,
+                "DONE");
+        long candidateId = jdbcTemplate.queryForObject(CANDIDATE_INSERT + " RETURNING id", Long.class, room[0],
+                room[1], jobId, "TODO", 0.9);
+        long userId = insertUser("아빠");
+        String insert = "INSERT INTO suggestion_feedback (candidate_id, user_id, action, dismiss_reason) "
+                + "VALUES (?, ?, ?, ?)";
+
+        assertThat(jdbcTemplate.update(insert, candidateId, userId, "DISMISSED", "JOKE")).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, candidateId, userId, "LIKED", null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V12_원문_연결은_정해진_항목_종류만_받는다() {
+        long[] room = insertGroupRoom();
+        long messageId = jdbcTemplate.queryForObject("INSERT INTO messages (room_id, seq, type, body) "
+                + "VALUES (?, 1, 'SYSTEM', '안녕') RETURNING id", Long.class, room[1]);
+        String insert = "INSERT INTO item_sources (entity_type, entity_id, message_id) VALUES (?, 1, ?)";
+
+        assertThat(jdbcTemplate.update(insert, "SCHEDULE", messageId)).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, "ALBUM", messageId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private static final String CANDIDATE_INSERT = "INSERT INTO registration_candidates (group_id, room_id, job_id, "
             + "type, fields, confidence, dedup_key, expires_at) VALUES (?, ?, ?, ?, '{}', ?, 'k', now())";
 

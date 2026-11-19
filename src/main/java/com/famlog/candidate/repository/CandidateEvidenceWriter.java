@@ -1,7 +1,10 @@
 package com.famlog.candidate.repository;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -9,7 +12,7 @@ import org.springframework.stereotype.Repository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 후보의 근거 메시지 (candidate_evidence) 저장과 근거 확인용 메시지 읽기.
+ * 후보의 근거 메시지 (candidate_evidence) 저장·조회와 근거 확인용 메시지 읽기.
  * 메시지 본문은 정규화 단서로만 쓰고 로그에 남기지 않는다.
  */
 @Repository
@@ -49,5 +52,42 @@ public class CandidateEvidenceWriter {
     public void lockGroup(long groupId) {
         jdbcTemplate.query("SELECT pg_advisory_xact_lock(?, ?)", rs -> null, LOCK_NAMESPACE,
                 Math.toIntExact(groupId));
+    }
+
+    /** 카드를 붙일 메시지: 근거 중 가장 나중 메시지 */
+    public record Anchor(long messageId, long seq) {
+    }
+
+    /** @param body 지운 메시지면 null */
+    public record EvidenceRow(long messageId, long seq, Long senderId, Instant sentAt, String spansJson,
+            String body) {
+    }
+
+    public Map<Long, Anchor> anchors(Collection<Long> candidateIds) {
+        Map<Long, Anchor> anchors = new HashMap<>();
+        if (candidateIds.isEmpty()) {
+            return anchors;
+        }
+        jdbcTemplate.query("""
+                SELECT DISTINCT ON (e.candidate_id) e.candidate_id, m.id, m.seq
+                FROM candidate_evidence e JOIN messages m ON m.id = e.message_id
+                WHERE e.candidate_id = ANY (?)
+                ORDER BY e.candidate_id, m.seq DESC
+                """, rs -> {
+            anchors.put(rs.getLong(1), new Anchor(rs.getLong(2), rs.getLong(3)));
+        }, (Object) candidateIds.toArray(Long[]::new));
+        return anchors;
+    }
+
+    /** 근거 메시지 (오래된 순) */
+    public List<EvidenceRow> evidence(long candidateId) {
+        return jdbcTemplate.query("""
+                SELECT m.id, m.seq, m.sender_id, m.created_at, e.spans::text,
+                       CASE WHEN m.deleted_at IS NULL THEN m.body END
+                FROM candidate_evidence e JOIN messages m ON m.id = e.message_id
+                WHERE e.candidate_id = ?
+                ORDER BY m.seq
+                """, (rs, i) -> new EvidenceRow(rs.getLong(1), rs.getLong(2), rs.getObject(3, Long.class),
+                rs.getTimestamp(4).toInstant(), rs.getString(5), rs.getString(6)), candidateId);
     }
 }

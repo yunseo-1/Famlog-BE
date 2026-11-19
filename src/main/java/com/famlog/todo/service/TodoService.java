@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
@@ -13,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
+import com.famlog.common.source.SourceRef;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
 import com.famlog.group.repository.GroupMemberRepository;
@@ -47,6 +50,7 @@ public class TodoService {
     private final TodoRepository todoRepository;
     private final GroupMemberRepository memberRepository;
     private final GroupAccessChecker accessChecker;
+    private final ItemSources itemSources;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -59,7 +63,7 @@ public class TodoService {
         }
         Todo todo = new Todo(groupId, userId, kind, request.title().strip(), request.assigneeId(),
                 validDue(request.dueDate()));
-        return TodoResponse.from(todoRepository.saveAndFlush(todo));
+        return TodoResponse.from(todoRepository.saveAndFlush(todo), null);
     }
 
     @Transactional(readOnly = true)
@@ -88,7 +92,9 @@ public class TodoService {
         }
         boolean hasNext = found.size() > pageSize;
         List<Todo> page = hasNext ? found.subList(0, pageSize) : found;
-        return new TodoListResponse(page.stream().map(TodoResponse::from).toList(),
+        Map<Long, SourceRef> sources = itemSources.find(ItemSources.TODO, page.stream().map(Todo::getId).toList());
+        return new TodoListResponse(page.stream().map(todo -> TodoResponse.from(todo, sources.get(todo.getId())))
+                .toList(),
                 hasNext ? TodoCursor.after(page.getLast()).encode() : null);
     }
 
@@ -96,7 +102,7 @@ public class TodoService {
     public TodoResponse get(long todoId, long userId) {
         Todo todo = find(todoId);
         accessChecker.requireMemberOrNotFound(todo.getGroupId(), userId);
-        return TodoResponse.from(todo);
+        return TodoResponse.from(todo, itemSources.find(ItemSources.TODO, todoId));
     }
 
     @Transactional
@@ -132,7 +138,7 @@ public class TodoService {
         } else if (Boolean.FALSE.equals(request.getDone())) {
             todo.reopen();
         }
-        return TodoResponse.from(todoRepository.saveAndFlush(todo));
+        return TodoResponse.from(todoRepository.saveAndFlush(todo), itemSources.find(ItemSources.TODO, todoId));
     }
 
     @Transactional
@@ -143,6 +149,7 @@ public class TodoService {
             throw notEditable();
         }
         todoRepository.delete(todo);
+        itemSources.removeAll(ItemSources.TODO, todoId);
     }
 
     private Todo find(long todoId) {

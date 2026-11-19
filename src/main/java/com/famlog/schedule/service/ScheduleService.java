@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
 import com.famlog.common.time.FamlogTime;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
@@ -49,6 +50,7 @@ public class ScheduleService {
     private final GroupMemberRepository memberRepository;
     private final GroupAccessChecker accessChecker;
     private final PlaceRepository placeRepository;
+    private final ItemSources itemSources;
 
     @Transactional
     public ScheduleResponse create(long groupId, long userId, ScheduleRequest request) {
@@ -58,7 +60,7 @@ public class ScheduleService {
         Schedule schedule = new Schedule(groupId, userId, request.title().strip(), timing, recurrence(request),
                 blankToNull(request.memo()), reminders(request, timing),
                 participants(groupId, request.participantIds(), Set.of()), request.placeId());
-        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place));
+        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place), null);
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +69,7 @@ public class ScheduleService {
         accessChecker.requireMemberOrNotFound(schedule.getGroupId(), userId);
         Place place = schedule.getPlaceId() == null ? null
                 : placeRepository.findById(schedule.getPlaceId()).orElse(null);
-        return ScheduleResponse.from(schedule, summaryOf(place));
+        return ScheduleResponse.from(schedule, summaryOf(place), itemSources.find(ItemSources.SCHEDULE, scheduleId));
     }
 
     @Transactional
@@ -85,12 +87,14 @@ public class ScheduleService {
                 reminders(request, timing),
                 participants(schedule.getGroupId(), request.participantIds(), schedule.getParticipantIds()),
                 request.placeId());
-        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place));
+        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place),
+                itemSources.find(ItemSources.SCHEDULE, scheduleId));
     }
 
     @Transactional
     public void delete(long scheduleId, long userId) {
         scheduleRepository.delete(editable(scheduleId, userId));
+        itemSources.removeAll(ItemSources.SCHEDULE, scheduleId);
     }
 
     private Schedule editable(long scheduleId, long userId) {

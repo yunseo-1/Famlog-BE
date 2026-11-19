@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 
+import com.famlog.common.source.SourceRef;
 import com.famlog.place.dto.PlaceDtos.PlaceSummary;
 import com.famlog.schedule.domain.Holiday;
 import com.famlog.schedule.domain.Reminder;
@@ -54,28 +55,28 @@ public final class ScheduleDtos {
             @Schema(description = "종일 일정의 마지막 날 (포함)") LocalDate endDate,
             List<Long> participantIds, String rrule, String memo, List<Reminder> reminders,
             @Schema(description = "연결한 장소 (없거나 장소가 지워졌으면 null)") PlaceSummary place, long createdBy,
-            long version, Instant createdAt, Instant updatedAt) {
+            long version, Instant createdAt, Instant updatedAt, SourceRef source) {
 
-        public static ScheduleResponse from(Schedule schedule, PlaceSummary place) {
+        public static ScheduleResponse from(Schedule schedule, PlaceSummary place, SourceRef source) {
             return new ScheduleResponse(schedule.getId(), schedule.getGroupId(), schedule.getTitle(),
                     schedule.isAllDay(), schedule.getStartsAt(), schedule.getEndsAt(),
                     firstDay(schedule, schedule.getStartsAt()), lastDay(schedule, schedule.getEndsAt()),
                     sorted(schedule.getParticipantIds()), schedule.getRrule(), schedule.getMemo(),
                     schedule.reminderList(), place, schedule.getCreatedBy(), schedule.getVersion(),
-                    schedule.getCreatedAt(), schedule.getUpdatedAt());
+                    schedule.getCreatedAt(), schedule.getUpdatedAt(), source);
         }
     }
 
     /** 기간 조회의 회차 하나. 반복 일정은 회차마다 한 줄이고 scheduleId 가 같다 */
     public record OccurrenceResponse(long scheduleId, String title, boolean allDay, Instant startsAt, Instant endsAt,
             LocalDate startDate, LocalDate endDate, List<Long> participantIds,
-            @Schema(description = "반복 일정의 회차") boolean recurring, long createdBy) {
+            @Schema(description = "반복 일정의 회차") boolean recurring, long createdBy, SourceRef source) {
 
-        public static OccurrenceResponse of(Schedule schedule, Instant start) {
+        public static OccurrenceResponse of(Schedule schedule, Instant start, SourceRef source) {
             Instant end = start.plus(schedule.duration());
             return new OccurrenceResponse(schedule.getId(), schedule.getTitle(), schedule.isAllDay(), start, end,
                     firstDay(schedule, start), lastDay(schedule, end), sorted(schedule.getParticipantIds()),
-                    schedule.getRrule() != null, schedule.getCreatedBy());
+                    schedule.getRrule() != null, schedule.getCreatedBy(), source);
         }
     }
 
