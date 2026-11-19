@@ -57,6 +57,21 @@ public final class GroupApi {
                 .andExpect(status().isOk());
     }
 
+    /** 그룹 AI 분석 켜기·끄기 (SET-01, ADMIN 이상) */
+    public static void setAiAnalysis(MockMvc mockMvc, long groupId, long actorId, boolean enabled) throws Exception {
+        mockMvc.perform(patch("/api/v1/groups/{g}/settings", groupId).with(as(actorId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"aiAnalysisEnabled\":%s}".formatted(enabled)))
+                .andExpect(status().isOk());
+    }
+
+    /** 내 메시지 AI 분석 제외 (SET-01) */
+    public static void setAiOptOut(MockMvc mockMvc, long groupId, long userId, boolean optOut) throws Exception {
+        mockMvc.perform(patch("/api/v1/groups/{g}/members/me/preferences", groupId).with(as(userId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"aiOptOut\":%s}".formatted(optOut)))
+                .andExpect(status().isOk());
+    }
+
     static RequestPostProcessor as(long userId) {
         return jwt().jwt(token -> token.subject(Long.toString(userId)).claim(FamlogJwtClaims.SESSION_ID, "1"));
     }

@@ -53,6 +53,10 @@ public class GroupMember extends BaseTimeEntity {
     @Column(name = "ai_opt_out", nullable = false)
     private boolean aiOptOut;
 
+    /** 분석 제외를 마지막으로 바꾼 시각. 이전 메시지는 AI 분석에 보내지 않는다 (제외했던 동안의 메시지 보호) */
+    @Column(name = "ai_opt_out_changed_at")
+    private Instant aiOptOutChangedAt;
+
     @Column(name = "last_read_seq", nullable = false)
     private long lastReadSeq;
 
@@ -117,6 +121,14 @@ public class GroupMember extends BaseTimeEntity {
     /** 이 그룹 알림 끄기 (SET-02) */
     public void muteNotifications(boolean muted) {
         this.notifMuted = muted;
+    }
+
+    /** 내 메시지 AI 분석 제외 (SET-01, 사양서 8.7). 본인만 바꾼다 */
+    public void changeAiOptOut(boolean optOut, Instant now) {
+        if (aiOptOut != optOut) {
+            aiOptOut = optOut;
+            aiOptOutChangedAt = now;
+        }
     }
 
     public void changeRole(GroupRole role) {

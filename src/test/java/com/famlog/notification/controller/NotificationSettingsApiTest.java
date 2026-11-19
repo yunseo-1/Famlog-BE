@@ -1,5 +1,6 @@
 package com.famlog.notification.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -78,6 +79,39 @@ class NotificationSettingsApiTest extends IntegrationTest {
 
         mockMvc.perform(get(PREFERENCES, groupId).with(asUser(userId))).andExpect(jsonPath("$.notifMuted").value(true));
         patchPreferences(groupId, userId, "{\"notifMuted\":false}").andExpect(jsonPath("$.notifMuted").value(false));
+    }
+
+    @Test
+    void 내_메시지_AI_분석_제외를_바꿀_수_있고_알림_설정은_그대로다() throws Exception {
+        long userId = createUser();
+        long groupId = GroupApi.createGroup(mockMvc, userId, "우리 가족");
+        patchPreferences(groupId, userId, "{\"notifMuted\":true}").andExpect(status().isOk());
+        mockMvc.perform(get(PREFERENCES, groupId).with(asUser(userId)))
+                .andExpect(jsonPath("$.aiOptOut").value(false));
+
+        patchPreferences(groupId, userId, "{\"aiOptOut\":true}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aiOptOut").value(true))
+                .andExpect(jsonPath("$.notifMuted").value(true));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_opt_out_changed_at IS NOT NULL FROM group_members "
+                + "WHERE group_id = ? AND user_id = ?", Boolean.class, groupId, userId)).isTrue();
+        mockMvc.perform(get(PREFERENCES, groupId).with(asUser(userId))).andExpect(jsonPath("$.aiOptOut").value(true));
+    }
+
+    @Test
+    void 관리자도_다른_구성원의_AI_분석_제외를_바꿀_수_없다() throws Exception {
+        long owner = createUser();
+        long member = createUser();
+        long groupId = GroupApi.createGroup(mockMvc, owner, "우리 가족");
+        GroupApi.addMember(mockMvc, groupId, owner, member);
+
+        // 경로에 다른 사람을 지정하는 API 가 없다: me 는 언제나 요청한 본인이다
+        patchPreferences(groupId, owner, "{\"aiOptOut\":true}").andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT ai_opt_out FROM group_members WHERE group_id = ? AND user_id = ?", Boolean.class, groupId,
+                member)).isFalse();
     }
 
     @Test

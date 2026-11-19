@@ -284,6 +284,58 @@ class FlywayMigrationTest extends IntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void V9_AI_요청_기록에는_대화_원문_컬럼이_없다() {
+        List<String> columns = jdbcTemplate.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'ai_jobs'", String.class);
+
+        assertThat(columns).contains("member_refs", "model_version", "prompt_version", "input_tokens",
+                "output_tokens", "latency_ms", "status");
+        assertThat(columns).noneMatch(c -> c.contains("body") || c.contains("text") || c.contains("prompt_body")
+                || c.contains("response") || c.contains("payload"));
+    }
+
+    @Test
+    void V9_정의되지_않은_AI_요청_상태는_저장되지_않는다() {
+        long[] room = insertGroupRoom();
+
+        assertThat(jdbcTemplate.update(AI_JOB_INSERT, room[0], room[1], 0, 3, "QUEUED")).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(AI_JOB_INSERT, room[0], room[1], 0, 3, "RUNNING"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V9_빈_분석_구간은_저장되지_않는다() {
+        long[] room = insertGroupRoom();
+
+        assertThatThrownBy(() -> jdbcTemplate.update(AI_JOB_INSERT, room[0], room[1], 3, 3, "QUEUED"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static final String AI_JOB_INSERT = "INSERT INTO ai_jobs (group_id, room_id, from_seq, to_seq, trigger, "
+            + "message_count, member_refs, status) VALUES (?, ?, ?, ?, 'RULE', 1, '{}', ?)";
+
+    /** @return {groupId, roomId} */
+    private long[] insertGroupRoom() {
+        long roomId = insertRoom(insertUser("엄마"));
+        long groupId = jdbcTemplate.queryForObject("SELECT group_id FROM chat_rooms WHERE id = ?", Long.class, roomId);
+        return new long[] { groupId, roomId };
+    }
+
+    @Test
+    void V9_그룹_AI_분석은_기본_꺼짐이고_분석_기준점은_0부터다() {
+        long[] room = insertGroupRoom();
+        long groupId = room[0];
+        long roomId = room[1];
+
+        jdbcTemplate.update("INSERT INTO group_settings (group_id) VALUES (?)", groupId);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_analysis_enabled FROM group_settings WHERE group_id = ?",
+                Boolean.class, groupId)).isFalse();
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_analyzed_seq FROM chat_rooms WHERE id = ?", Long.class,
+                roomId)).isZero();
+    }
+
     private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
             + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
 

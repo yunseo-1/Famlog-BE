@@ -1,4 +1,4 @@
-"""환경 변수 설정. 스트림 이름은 API(MediaProperties.Streams)와 같아야 한다."""
+"""환경 변수 설정. 스트림 이름은 API(MediaProperties.Streams, AiProperties.Streams)와 같아야 한다."""
 
 import os
 import socket
@@ -23,7 +23,14 @@ class Settings:
     group: str = "media-workers"
     consumer: str = socket.gethostname()
 
-    max_attempts: int = 3  # 사양서 20 S9: 실패 재시도 3회 후 DLQ
+    # AI 대화 분석 (사양서 4.5 ARC-01, 7.2)
+    ai_jobs_stream: str = "famlog:ai.extract"
+    ai_results_stream: str = "famlog:ai.extract-results"
+    ai_dlq_stream: str = "famlog:ai.extract:dlq"
+    ai_group: str = "ai-workers"
+    llm_provider: str = "fake"  # S18 전까지는 가짜 응답만 (실제 LLM 을 부르지 않는다)
+
+    max_attempts: int = 3  # 사양서 20 S9·S16: 실패 재시도 3회 후 DLQ
     max_video_seconds: int = 300  # 동영상 5분 (CHAT-05)
     max_image_pixels: int = 100_000_000  # 압축 폭탄 방지
 
@@ -40,4 +47,5 @@ class Settings:
             s3_secret_key=env.get("S3_SECRET_KEY") or None,
             s3_bucket=env.get("S3_BUCKET_MEDIA", cls.s3_bucket),
             max_video_seconds=int(env.get("MEDIA_MAX_VIDEO_SECONDS", cls.max_video_seconds)),
+            llm_provider=env.get("LLM_PROVIDER", cls.llm_provider),
         )

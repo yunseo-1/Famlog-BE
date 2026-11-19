@@ -1,7 +1,7 @@
 [project]
 name = "famlog-worker"
 version = "0.1.0"
-description = "FamLog 워커: Redis Streams 소비 (미디어 처리)"
+description = "FamLog 워커: Redis Streams 소비 (미디어 처리, AI 대화 분석)"
 requires-python = ">=3.12"
 
 [tool.pytest.ini_options]

@@ -7,6 +7,7 @@ import com.famlog.chat.dto.ChatDtos.LastMessage;
 import com.famlog.group.domain.FamilyRole;
 import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
+import com.famlog.group.domain.GroupSettings;
 import com.famlog.user.domain.User;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -68,5 +69,19 @@ public final class GroupDtos {
 
     /** @param link App Links 초대 링크 (도메인이 정해지기 전까지는 설정값) */
     public record InviteResponse(String code, String link, Instant expiresAt) {
+    }
+
+    // --- SET-01 그룹 설정 ---
+
+    public record UpdateGroupSettingsRequest(
+            @Schema(description = "AI 분석 켜기 (채팅에서 일정·할 일·장소 후보를 찾는다)") @NotNull Boolean aiAnalysisEnabled) {
+    }
+
+    /** @param aiEnabledAt 마지막으로 켠 시각 (한 번도 안 켰으면 null) */
+    public record GroupSettingsResponse(boolean aiAnalysisEnabled, Instant aiEnabledAt) {
+
+        public static GroupSettingsResponse from(GroupSettings settings) {
+            return new GroupSettingsResponse(settings.isAiAnalysisEnabled(), settings.getAiEnabledAt());
+        }
     }
 }

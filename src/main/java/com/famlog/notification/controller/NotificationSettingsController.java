@@ -36,13 +36,15 @@ public class NotificationSettingsController {
         return settingsService.update(user.userId(), request);
     }
 
-    @Operation(summary = "이 그룹 알림 설정")
+    @Operation(summary = "이 그룹 알림·AI 분석 제외 설정")
     @GetMapping("/api/v1/groups/{groupId}/members/me/preferences")
     GroupPreferencesResponse groupPreferences(AuthUser user, @PathVariable long groupId) {
         return settingsService.groupPreferences(groupId, user.userId());
     }
 
-    @Operation(summary = "이 그룹 알림 끄기·켜기", description = "끄면 이 그룹의 새 메시지 푸시가 오지 않는다")
+    @Operation(summary = "이 그룹 알림·AI 분석 제외 바꾸기",
+            description = "보낸 값만 바꾼다. 알림을 끄면 새 메시지 푸시가 오지 않고, AI 분석 제외를 켜면 내 메시지를 AI 분석에 보내지 않는다 "
+                    + "(제외했던 동안의 메시지는 다시 켜도 보내지 않는다)")
     @PatchMapping("/api/v1/groups/{groupId}/members/me/preferences")
     GroupPreferencesResponse updateGroupPreferences(AuthUser user, @PathVariable long groupId,
             @Valid @RequestBody GroupPreferencesRequest request) {

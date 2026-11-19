@@ -6,6 +6,8 @@ import time
 
 import redis
 
+from .ai.consumer import AiConsumer
+from .ai.llm import create_client
 from .config import Settings
 from .consumer import MediaConsumer
 from .health import HEARTBEAT
@@ -22,6 +24,7 @@ def main() -> None:
                          decode_responses=True)
     storage = Storage(settings)
     consumer = MediaConsumer(client, settings, lambda job: process(job, storage, settings))
+    ai_consumer = AiConsumer(client, settings, create_client(settings.llm_provider))
 
     running = True
 
@@ -35,20 +38,23 @@ def main() -> None:
     while running:
         try:
             consumer.ensure_group()
+            ai_consumer.ensure_group()
             break
         except redis.RedisError as e:
             log.warning("Redis에 연결하지 못했습니다, 다시 시도합니다: %s", type(e).__name__)
             time.sleep(3)
 
-    log.info("미디어 워커 시작: stream=%s group=%s", settings.jobs_stream, settings.group)
+    log.info("워커 시작: media=%s ai=%s llm=%s", settings.jobs_stream, settings.ai_jobs_stream,
+             settings.llm_provider)
     while running:
         HEARTBEAT.touch()
         try:
-            consumer.run_once(block_ms=5000)
+            consumer.run_once(block_ms=2000)
+            ai_consumer.run_once(block_ms=2000)
         except redis.RedisError as e:
             log.warning("Redis 읽기 실패: %s", type(e).__name__)
             time.sleep(3)
-    log.info("미디어 워커 종료")
+    log.info("워커 종료")
 
 
 if __name__ == "__main__":

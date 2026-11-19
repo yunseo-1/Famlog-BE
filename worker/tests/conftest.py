@@ -79,11 +79,12 @@ def probe_tags(path: Path) -> dict:
 
 
 class FakeRedis:
-    """MediaConsumer 가 쓰는 명령만 흉내 낸다"""
+    """MediaConsumer·AiConsumer 가 쓰는 명령만 흉내 낸다"""
 
     def __init__(self):
         self.streams: dict[str, list[dict]] = {}
         self.acked: list = []
+        self.deleted: list = []
 
     def xadd(self, stream, fields):
         self.streams.setdefault(stream, []).append(dict(fields))
@@ -91,6 +92,9 @@ class FakeRedis:
 
     def xack(self, stream, group, message_id):
         self.acked.append(message_id)
+
+    def xdel(self, stream, message_id):
+        self.deleted.append(message_id)
 
     def xgroup_create(self, *args, **kwargs):
         return True
