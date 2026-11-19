@@ -118,7 +118,7 @@ famlog:
       CE7: CAFE         # 카페
       AT4: TRAVEL       # 관광명소
       AD5: TRAVEL       # 숙박
-      CT1: TRAVEL       # 문화시설
+      CT1: ETC          # 문화시설: 영화관·공연장이 섞여 있어 여행지로 추천하지 않는다
       HP8: LIFE         # 병원
       PM9: LIFE         # 약국
       MT1: LIFE         # 대형마트

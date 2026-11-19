@@ -83,6 +83,7 @@
 | 11/19 | 한글 목록 정렬(별칭·지역)은 DB가 아니라 서버 코드에서 가나다(유니코드) 순 | DB 정렬 규칙(collation)에 따라 한글 순서가 달라짐 |
 | 11/19 | 동의 API는 사양서 11.3대로 GET·PUT만(철회는 `{agreed:false}`), 지금은 LOCATION만. AI 분석·국외 이전은 S16 | 모바일 요청 (S15-2 내 주변 전) |
 | 11/19 | 내 주변은 위치 동의가 있어야 한다(403 `LOCATION_CONSENT_REQUIRED`). 장소 검색의 x·y는 막지 않는다 | 지도 중심일 수 있어 서버가 구분 못 함. 앱이 동의 시에만 현재 위치를 보낸다 |
+| 11/19 | 추천 카테고리(`suggestedCategory`): 카카오 `CT1`(문화시설)은 `ETC`. 관광명소 `AT4`·숙박 `AD5`만 `TRAVEL` | 영화관·공연장이 여행지로 추천됨 (모바일 실기기 확인). 이미 공유된 장소는 그대로 |
 
 ## 3. Figma 상태
 
@@ -252,7 +253,7 @@
 
 **공유** `POST /groups/{groupId}/places {kakaoPlaceId, category, oneLineReview?, rating?, shareToChat?}` → 201
 - **검색 후 1시간 안에** 그 검색 결과의 `kakaoPlaceId`로 공유한다. 지나면 400 "다시 검색"
-- `category`: `RESTAURANT`(맛집)·`CAFE`·`TRAVEL`(여행지)·`LIFE`(병원·생활)·`ETC`. `rating` 1~5, `oneLineReview` 최대 100자
+- `category`: `RESTAURANT`(맛집)·`CAFE`·`TRAVEL`(여행지)·`LIFE`(병원·생활)·`ETC`. 검색 추천값은 `application.yml`의 `famlog.place.category-map`(카카오 분류 코드 → 카테고리, 없는 코드·`CT1` 문화시설은 `ETC`). `rating` 1~5, `oneLineReview` 최대 100자
 - 같은 그룹에 같은 장소가 있으면 409 `PLACE_ALREADY_SHARED`
 - `shareToChat`(기본 true)이면 채팅방에 `PLACE` 메시지: `body` = 장소 이름, `payload` = `{placeId, name, category, address, region1, region2, rating}` (공유한 순간 값). 푸시 본문 "장소를 공유했어요: ○○"
 
@@ -358,3 +359,4 @@
 | 2026-11-18 | TODO-01 | 시스템 메시지 이름을 그룹 호칭 우선으로 (입장·퇴장·할 일 완료) | fix(TODO-01) |
 | 2026-11-19 | PLC-01~06 | 카카오 로컬 검색 프록시(결과 캐시·요청 제한), 장소 공유·채팅 장소 카드·푸시, 지역·공유자·카테고리·지도 영역 목록, 지역별 개수, 내 주변(PostGIS, 좌표 비저장·위치 이용 기록·플래그), 다녀옴·가고 싶어요, 별칭 장소, 일정 장소 연결(V8) | feat(S14) |
 | 2026-11-19 | PLC-04 | 위치기반서비스 동의 API(`GET·PUT /users/me/consents`, LOCATION만, 버전 확인·이력 보존·철회 시 사진 위치 삭제), 내 주변은 동의 필요(403) | feat(PLC-04) |
+| 2026-11-19 | PLC-01 | 추천 카테고리: 카카오 문화시설(`CT1`, 영화관·공연장 포함)을 여행지 대신 기타로 | fix(PLC-01) |
