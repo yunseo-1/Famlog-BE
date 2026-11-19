@@ -9,6 +9,7 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.famlog.support.Family;
@@ -155,6 +158,7 @@ class PlaceQueryTest extends IntegrationTest {
         share(family.mom(), "가까운 곳", "FD6", "서울 서초구 서초동 1", 37.505, 127.0, "RESTAURANT");
         share(family.mom(), "먼 곳", "FD6", "서울 서초구 서초동 3", 37.55, 127.0, "RESTAURANT");
         share(family.mom(), "중간", "FD6", "서울 서초구 서초동 2", 37.52, 127.0, "RESTAURANT");
+        agreeLocation(family.dad());
         long stranger = createUser();
         long otherGroup = GroupApi.createGroup(mockMvc, stranger, "다른 가족");
         shareNew(mockMvc, kakao, otherGroup, stranger, doc("남의 집 앞", "FD6", "서울 서초구 서초동 9", 37.5001,
@@ -174,6 +178,7 @@ class PlaceQueryTest extends IntegrationTest {
 
     @Test
     void 내_주변_좌표와_반경을_검증한다() throws Exception {
+        agreeLocation(family.dad());
         for (String[] params : new String[][] { { "95", "127", "3" }, { "37.5", "181", "3" }, { "37.5", "127", "0.5" },
                 { "37.5", "127", "21" } }) {
             mockMvc.perform(nearby(params[0], params[1], params[2]).with(asUser(family.dad())))
@@ -186,6 +191,7 @@ class PlaceQueryTest extends IntegrationTest {
     @Test
     void 좌표는_로그에_남지_않는다(CapturedOutput output) throws Exception {
         share(family.mom(), "로그 확인", "FD6", "서울 서초구 서초동 1", 37.505, 127.0, "RESTAURANT");
+        agreeLocation(family.dad());
 
         mockMvc.perform(nearby("37.512345", "127.098765", null).with(asUser(family.dad())))
                 .andExpect(status().isOk());
@@ -198,6 +204,24 @@ class PlaceQueryTest extends IntegrationTest {
     }
 
     @Test
+    void 위치기반서비스에_동의하지_않았거나_철회하면_내_주변은_403이고_기록하지_않는다() throws Exception {
+        nearbyAs(family.son())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LOCATION_CONSENT_REQUIRED"));
+        agreeLocation(family.son());
+        nearbyAs(family.son()).andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/users/me/consents/LOCATION").with(asUser(family.son()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"agreed\":false}"))
+                .andExpect(status().isOk());
+        nearbyAs(family.son())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LOCATION_CONSENT_REQUIRED"));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM location_access_logs WHERE user_id = ? "
+                + "AND purpose = 'NEARBY'", Long.class, family.son())).isEqualTo(1);
+    }
+
+    @Test
     void 구성원이_아니면_목록_개수_내_주변_모두_403() throws Exception {
         long stranger = createUser();
         mockMvc.perform(get(LIST, family.groupId()).with(asUser(stranger))).andExpect(status().isForbidden());
@@ -206,6 +230,17 @@ class PlaceQueryTest extends IntegrationTest {
         mockMvc.perform(nearby("37.5", "127.0", null).with(asUser(stranger))).andExpect(status().isForbidden());
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM location_access_logs WHERE user_id = ?",
                 Long.class, stranger)).isZero();
+    }
+
+    private ResultActions nearbyAs(long userId) throws Exception {
+        return mockMvc.perform(nearby("37.5", "127.0", null).with(asUser(userId)));
+    }
+
+    /** 내 주변은 위치기반서비스 동의가 있어야 쓸 수 있다 */
+    private void agreeLocation(long userId) throws Exception {
+        mockMvc.perform(put("/api/v1/users/me/consents/LOCATION").with(asUser(userId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"agreed\":true,\"docVersion\":\"1.0\"}"))
+                .andExpect(status().isOk());
     }
 
     private MockHttpServletRequestBuilder nearby(String lat, String lng, String radiusKm) {

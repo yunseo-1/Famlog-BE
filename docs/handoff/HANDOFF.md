@@ -81,6 +81,8 @@
 | 11/19 | 같은 그룹에 같은 카카오 장소는 하나 (409 `PLACE_ALREADY_SHARED`). 장소 수정·삭제는 공유한 사람·ADMIN 이상, 낙관적 잠금 없음 | 10.2 places에 version 없음 |
 | 11/19 | 내 주변 기능 플래그는 설정값 `famlog.place.nearby-enabled` (꺼지면 404). DB `feature_flags`·관리 화면은 S20 | 사양서 8.6 출시 전 할 일 |
 | 11/19 | 한글 목록 정렬(별칭·지역)은 DB가 아니라 서버 코드에서 가나다(유니코드) 순 | DB 정렬 규칙(collation)에 따라 한글 순서가 달라짐 |
+| 11/19 | 동의 API는 사양서 11.3대로 GET·PUT만(철회는 `{agreed:false}`), 지금은 LOCATION만. AI 분석·국외 이전은 S16 | 모바일 요청 (S15-2 내 주변 전) |
+| 11/19 | 내 주변은 위치 동의가 있어야 한다(403 `LOCATION_CONSENT_REQUIRED`). 장소 검색의 x·y는 막지 않는다 | 지도 중심일 수 있어 서버가 구분 못 함. 앱이 동의 시에만 현재 위치를 보낸다 |
 
 ## 3. Figma 상태
 
@@ -262,6 +264,13 @@
 **내 주변** `GET .../places/nearby?lat=&lng=&radiusKm=`(1~20, 기본 3) → `{items:[{place, distanceM}]}` 가까운 순 최대 50
 - 좌표는 저장·로그하지 않고, 쓸 때마다 `location_access_logs`(NEARBY). 기능이 꺼져 있으면 404 → 앱은 버튼을 숨긴다
 
+**위치 동의** (사양서 8.3, 앱 S15-2)
+- `GET /users/me/consents` → `{items:[{type, agreed, docVersion, agreedAt, currentVersion, reconsentRequired}]}` (TERMS·PRIVACY·AI_ANALYSIS·OVERSEAS_TRANSFER·LOCATION 순)
+- `PUT /users/me/consents/LOCATION` 동의 `{agreed:true, docVersion:"1.0"}`(현재 버전 `famlog.consent.location-version`과 다르면 400), 철회 `{agreed:false}` → 내가 올린 사진의 위치(`media_assets.location`)도 지운다. 여러 번 해도 같다
+- 다른 종류는 400 (필수 동의는 탈퇴로만, AI 분석·국외 이전은 S16)
+- 이력은 지우지 않는다: 철회는 `withdrawn_at`, 새 버전 동의는 새 행
+- 내 주변은 동의가 없으면 403 `LOCATION_CONSENT_REQUIRED` (위치 이용 기록도 안 남김). 검색 x·y에 현재 위치는 동의한 경우에만 보낸다
+
 **하나·수정·삭제** `/places/{id}`: 다른 그룹 장소 → 404
 - `PATCH {category?, oneLineReview?, rating?}`: 보낸 키만, `oneLineReview`·`rating`은 null이면 지운다. 공유한 사람 또는 ADMIN 이상(403)
 - `DELETE` → 204. 일정·별칭의 연결은 비워지고 표시도 지워진다. 채팅 카드는 남는다 (눌러서 404면 "삭제된 장소")
@@ -316,6 +325,7 @@
 | 11.2 (S14) | 에러 코드 `PLACE_ALREADY_SHARED`(409), `ALIAS_DUPLICATED`(409) |
 | 11.3 (S14) | 검색 `page`·`groupId`, 목록 지도 영역(`swLat` 등)·커서, `GET /places/{id}`, `PUT·DELETE /places/{id}/marks/{kind}`(PLC-05), 별칭 삭제 `/place-aliases/{aliasId}`, 일정 요청 `placeId`·응답 `place` |
 | 8.6 (S14) | 장소 검색에 현재 위치를 보내면 `PLACE_SEARCH`로 기록 |
+| 11.2·11.3 (위치 동의) | 에러 코드 `LOCATION_CONSENT_REQUIRED`(403), `PUT /users/me/consents/{type}` 요청 `{agreed, docVersion}`·지금은 LOCATION만, 내 주변은 위치 동의 필요 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -347,3 +357,4 @@
 | 2026-11-18 | SCH-01~05·TODO-01 | 일정 등록·수정·삭제(낙관적 잠금), 반복 RRULE 펼치기, 구성원·역할 필터, 겹침 조회, 리마인드 스케줄러·푸시, 공휴일 2026~2027, 할 일·커서 목록·완료 채팅 알림(V7) | feat(S12) |
 | 2026-11-18 | TODO-01 | 시스템 메시지 이름을 그룹 호칭 우선으로 (입장·퇴장·할 일 완료) | fix(TODO-01) |
 | 2026-11-19 | PLC-01~06 | 카카오 로컬 검색 프록시(결과 캐시·요청 제한), 장소 공유·채팅 장소 카드·푸시, 지역·공유자·카테고리·지도 영역 목록, 지역별 개수, 내 주변(PostGIS, 좌표 비저장·위치 이용 기록·플래그), 다녀옴·가고 싶어요, 별칭 장소, 일정 장소 연결(V8) | feat(S14) |
+| 2026-11-19 | PLC-04 | 위치기반서비스 동의 API(`GET·PUT /users/me/consents`, LOCATION만, 버전 확인·이력 보존·철회 시 사진 위치 삭제), 내 주변은 동의 필요(403) | feat(PLC-04) |

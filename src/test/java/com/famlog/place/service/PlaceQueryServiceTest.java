@@ -17,6 +17,7 @@ import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.place.repository.LocationAccessLogRepository;
 import com.famlog.place.repository.PlaceMarkRepository;
 import com.famlog.place.repository.PlaceRepository;
+import com.famlog.user.repository.ConsentRepository;
 
 /** 내 주변 기능 플래그 (사양서 8.6 출시 전 할 일): 끄면 404 이고 위치를 쓰지도, 기록하지도 않는다. */
 class PlaceQueryServiceTest {
@@ -28,8 +29,8 @@ class PlaceQueryServiceTest {
         GroupAccessChecker checker = mock(GroupAccessChecker.class);
         PlaceProperties off = new PlaceProperties("https://dapi.kakao.com", "", Duration.ofHours(1),
                 Duration.ofMinutes(10), 30, Duration.ofMinutes(1), false, 50, 100, Map.of());
-        PlaceQueryService service = new PlaceQueryService(places, mock(PlaceMarkRepository.class), logs, checker, off,
-                Clock.systemUTC());
+        PlaceQueryService service = new PlaceQueryService(places, mock(PlaceMarkRepository.class), logs, checker,
+                mock(ConsentRepository.class), off, Clock.systemUTC());
 
         assertThatThrownBy(() -> service.nearby(1, 2, 37.5, 127.0, 3))
                 .isInstanceOfSatisfying(BusinessException.class,
