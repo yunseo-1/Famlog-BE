@@ -115,6 +115,7 @@
 | 11/20 | 되돌리기: 승인한 사람이나 ADMIN 이상, 5분 안. 만든 항목·원문 연결·승인 시스템 메시지를 지운다 | 사용자 결정 |
 | 11/20 | 후보 처리 푸시는 승인 시스템 메시지의 채팅 푸시뿐. 참석자·담당자 개별 푸시·후보 생성 푸시는 S20 알림 설정과 함께 | 사용자 결정 |
 | 11/20 | 일정·할 일·장소 응답에 `source {messageId, seq}` (채팅에서 등록한 항목의 원문). 만료 승인은 409 `CANDIDATE_EXPIRED`. 같은 사람이 다시 처리하면 같은 결과(Idempotency-Key 대신) | 사용자 결정 |
+| 11/20 | S19-1: `source`에 `candidateId` 추가. 마이그레이션 없이 후보의 `created_entity_*`·근거 메시지로 찾는다 | 앱 요청, 사용자 결정 |
 
 ## 3. Figma 상태
 
@@ -175,7 +176,8 @@
 | S17 | ARC-02·04 날짜·시각·구성원 정규화 (단위 테스트 89개, AR-9) | ✅ PR #19 |
 | S18-1 | ARC-02~04·07 후보 생성: 검증·정규화·장소 상위 3개·중복 제거·신뢰도 (가짜 LLM) | ✅ PR #20 |
 | S18-2 | 실제 LLM(claude-haiku-5-5, 캐싱)·프롬프트 extract_v1·호출/비용 상한·평가셋 50건 | ✅ PR #21 |
-| S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ 이번 PR |
+| S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ PR #22 |
+| S19-1 | ARC-06 원문 보기 강조용 `source.candidateId` | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -395,7 +397,7 @@
 - `candidate.created`: 목록 항목과 같은 형태 (새 후보만. 근거만 늘어난 경우는 보내지 않는다)
 - `candidate.resolved`: `{groupId, candidateId, status, decidedBy, decidedByName, entityType, entityId, linkedExisting}` → "엄마가 등록했어요" 로 바꾼다
 
-**원문 보기 (ARC-06)**: 일정(상세·기간 조회 회차)·할 일·장소 응답의 `source {messageId, seq}` (채팅에서 등록했으면, 아니면 null)
+**원문 보기 (ARC-06)**: 일정(상세·기간 조회 회차)·할 일·장소 응답의 `source {messageId, seq, candidateId}` (채팅에서 등록했으면, 아니면 null). `candidateId`는 그 메시지를 근거로 항목을 만든(장소는 기존 장소에 연결한) 승인 후보, 여럿이면 먼저 승인한 것. 앱은 `GET /candidates/{candidateId}`의 evidence spans로 추출 부분을 강조하고, null이면 메시지 전체를 강조한다 (S19-1)
 
 ### 다음 단계로 넘긴 것
 

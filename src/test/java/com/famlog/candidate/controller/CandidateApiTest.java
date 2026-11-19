@@ -148,7 +148,13 @@ class CandidateApiTest extends ChatIntegrationTest {
                 .andExpect(jsonPath("$.participantIds.length()").value(3))
                 .andExpect(jsonPath("$.memo").value("장소: 할머니 댁"))
                 .andExpect(jsonPath("$.createdBy").value(family.dad()))
-                .andExpect(jsonPath("$.source.messageId").value(evidence));
+                .andExpect(jsonPath("$.source.messageId").value(evidence))
+                .andExpect(jsonPath("$.source.candidateId").value(id));
+        mockMvc.perform(get("/api/v1/groups/{g}/schedules", family.groupId()).with(asUser(family.son()))
+                        .param("from", tomorrow.toString()).param("to", tomorrow.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.scheduleId == %d)].source.candidateId".formatted(scheduleId))
+                        .value(org.hamcrest.Matchers.contains((int) id)));
         assertThat(feedback(id)).containsExactly("APPROVED:{}");
         Map<String, Object> system = jdbcTemplate.queryForMap("SELECT body, payload::text AS payload FROM messages "
                 + "WHERE room_id = ? AND type = 'SYSTEM' ORDER BY seq DESC LIMIT 1", roomId);
@@ -258,7 +264,8 @@ class CandidateApiTest extends ChatIntegrationTest {
         mockMvc.perform(get("/api/v1/todos/{id}", todoId).with(asUser(family.mom())))
                 .andExpect(jsonPath("$.assigneeId").value(family.dad()))
                 .andExpect(jsonPath("$.dueDate").value(tomorrow.toString()))
-                .andExpect(jsonPath("$.source.seq").exists());
+                .andExpect(jsonPath("$.source.seq").exists())
+                .andExpect(jsonPath("$.source.candidateId").value(one));
 
         approve(family.son(), two, "{\"version\":0}").andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("assigneeIds"));
@@ -284,7 +291,8 @@ class CandidateApiTest extends ChatIntegrationTest {
                 .andExpect(jsonPath("$.category").value("RESTAURANT"))
                 .andExpect(jsonPath("$.oneLineReview").value("칼국수가 정말 맛있음"))
                 .andExpect(jsonPath("$.sharedBy").value(family.mom()))
-                .andExpect(jsonPath("$.source.messageId").exists());
+                .andExpect(jsonPath("$.source.messageId").exists())
+                .andExpect(jsonPath("$.source.candidateId").value(single));
 
         String cafe = "카페" + UUID.randomUUID();
         var first = PlaceApi.doc(cafe + "1", "CE7", "서울 중구 1", 37.5, 127.0);
@@ -313,11 +321,38 @@ class CandidateApiTest extends ChatIntegrationTest {
                 .andExpect(jsonPath("$.candidate.entityType").value("PLACE"))
                 .andExpect(jsonPath("$.candidate.linkedExisting").value(true));
         mockMvc.perform(get("/api/v1/places/{id}", shared).with(asUser(family.mom())))
-                .andExpect(jsonPath("$.source.messageId").exists());
+                .andExpect(jsonPath("$.source.messageId").exists())
+                .andExpect(jsonPath("$.source.candidateId").value(id));
 
         undo(family.mom(), id).andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/places/{id}", shared).with(asUser(family.mom())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.source").doesNotExist());
+    }
+
+    @Test
+    void 한_메시지에서_나온_후보가_여럿이면_항목마다_자기를_만든_후보를_원문으로_가리킨다() throws Exception {
+        long scheduleCandidate = candidate(family.mom(), "내일 11시에 할머니 댁 가자 아빠는 선물 사 와", """
+                {"type":"SCHEDULE","fields":{"title":"할머니 댁 방문","dateText":"내일","startTimeText":"11시",
+                 "attendeeTexts":["가자"]},"confidence":0.9,"evidence":[{"messageId":%1$d,"spans":["내일 11시"]}]},
+                {"type":"TODO","fields":{"title":"선물 사기","assigneeTexts":["아빠"]},"confidence":0.9,
+                 "evidence":[{"messageId":%1$d,"spans":["선물 사 와"]}]}""");
+        long todoCandidate = jdbcTemplate.queryForObject("""
+                SELECT id FROM registration_candidates WHERE job_id = (SELECT job_id FROM registration_candidates
+                WHERE id = ?) AND type = 'TODO'""", Long.class, scheduleCandidate);
+
+        long scheduleId = ((Number) JsonPath.read(approve(family.dad(), scheduleCandidate, "{\"version\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.candidate.entityId"))
+                .longValue();
+        long todoId = ((Number) JsonPath.read(approve(family.dad(), todoCandidate, "{\"version\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.candidate.entityId"))
+                .longValue();
+
+        mockMvc.perform(get("/api/v1/schedules/{id}", scheduleId).with(asUser(family.son())))
+                .andExpect(jsonPath("$.source.candidateId").value(scheduleCandidate));
+        mockMvc.perform(get("/api/v1/todos/{id}", todoId).with(asUser(family.son())))
+                .andExpect(jsonPath("$.source.candidateId").value(todoCandidate));
+        mockMvc.perform(get("/api/v1/candidates/{id}", todoCandidate).with(asUser(family.son())))
+                .andExpect(jsonPath("$.evidence[0].spans[0]").value("선물 사 와"));
     }
 
     // ---- 무시 ----
