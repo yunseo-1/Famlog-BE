@@ -24,7 +24,7 @@ def main() -> None:
                          decode_responses=True)
     storage = Storage(settings)
     consumer = MediaConsumer(client, settings, lambda job: process(job, storage, settings))
-    ai_consumer = AiConsumer(client, settings, create_client(settings.llm_provider))
+    ai_consumer = AiConsumer(client, settings, create_client(settings))
 
     running = True
 

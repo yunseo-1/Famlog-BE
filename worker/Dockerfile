@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY pyproject.toml .
 COPY app ./app
+COPY prompts ./prompts
 RUN useradd --create-home --uid 10001 worker
 USER worker
 

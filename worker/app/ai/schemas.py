@@ -130,6 +130,8 @@ class ExtractResult(BaseModel):
     prompt_version: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
     latency_ms: int | None = None
 
     def to_fields(self) -> dict[str, str]:
@@ -146,5 +148,7 @@ class ExtractResult(BaseModel):
             "promptVersion": text(self.prompt_version),
             "inputTokens": text(self.input_tokens),
             "outputTokens": text(self.output_tokens),
+            "cacheReadTokens": text(self.cache_read_tokens),
+            "cacheWriteTokens": text(self.cache_write_tokens),
             "latencyMs": text(self.latency_ms),
         }

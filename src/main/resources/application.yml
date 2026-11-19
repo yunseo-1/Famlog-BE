@@ -137,6 +137,15 @@ famlog:
     batch-size: 30         # 보조 분석: 분석 안 된 메시지가 쌓이면 바로
     context-size: 20       # 앞 맥락
     max-messages: 50       # 한 요청의 분석 구간 최대 (넘으면 최근 것만)
+    limits:                # 사양서 7.2 비용 관리
+      daily-calls-per-group: 100   # 그룹별 하루(KST) 분석 요청 수
+      monthly-budget-usd: 20       # 월(UTC) 전체 비용 상한. 닿으면 새 요청을 만들지 않는다
+      warn-ratio: 0.8              # 넘으면 그달에 한 번 경고 로그
+    pricing:               # claude-haiku-5-5, 100만 토큰당 달러 (프롬프트 10만 토큰 이하)
+      input: 0.10
+      output: 0.50
+      cache-read: 0.01
+      cache-write: 0.125           # 5분 캐시 쓰기 = 입력 × 1.25
   # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
   consent:
     terms-version: "1.0"

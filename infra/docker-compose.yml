@@ -87,7 +87,10 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA}
-      LLM_PROVIDER: fake    # AI 대화 분석: S18 전까지는 가짜 응답만 (실제 LLM 호출 없음)
+      # AI 대화 분석: fake(가짜 응답, 호출 없음) / anthropic(Claude API, 키 필요). 그룹 AI 분석을 켠 그룹만 호출한다
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       redis:
         condition: service_healthy

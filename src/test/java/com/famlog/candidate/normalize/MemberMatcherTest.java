@@ -67,6 +67,13 @@ class MemberMatcherTest {
     }
 
     @Test
+    void 부르는_말은_떼고_찾는다() {
+        assertThat(match(DAD, "막내야").userIds()).containsExactly(YOUNGEST);
+        assertThat(match(MOM, "딸아").userIds()).containsExactly(DAUGHTER);
+        assertThat(match(MOM, "엄마야").userIds()).containsExactly(MOM);
+    }
+
+    @Test
     void 나는_보낸_사람이다() {
         assertThat(match(MOM, "나").userIds()).containsExactly(MOM);
         assertThat(match(BIG_SON, "내가").userIds()).containsExactly(BIG_SON);

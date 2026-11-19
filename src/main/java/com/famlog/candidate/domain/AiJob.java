@@ -76,6 +76,12 @@ public class AiJob extends BaseTimeEntity {
     @Column(name = "output_tokens")
     private Integer outputTokens;
 
+    @Column(name = "cache_read_tokens")
+    private Integer cacheReadTokens;
+
+    @Column(name = "cache_write_tokens")
+    private Integer cacheWriteTokens;
+
     @Column(name = "latency_ms")
     private Integer latencyMs;
 
@@ -97,9 +103,13 @@ public class AiJob extends BaseTimeEntity {
         this.status = AiJobStatus.QUEUED;
     }
 
-    /** 워커가 알려 준 측정값 (원문 없음) */
+    /**
+     * 워커가 알려 준 측정값 (원문 없음)
+     *
+     * @param inputTokens 캐시를 거치지 않은 입력
+     */
     public record Usage(String modelVersion, String promptVersion, Integer inputTokens, Integer outputTokens,
-            Integer latencyMs) {
+            Integer cacheReadTokens, Integer cacheWriteTokens, Integer latencyMs) {
     }
 
     public void complete(Usage usage, int candidateCount, Instant now) {
@@ -123,6 +133,8 @@ public class AiJob extends BaseTimeEntity {
         this.promptVersion = usage.promptVersion();
         this.inputTokens = usage.inputTokens();
         this.outputTokens = usage.outputTokens();
+        this.cacheReadTokens = usage.cacheReadTokens();
+        this.cacheWriteTokens = usage.cacheWriteTokens();
         this.latencyMs = usage.latencyMs();
         this.finishedAt = now;
     }

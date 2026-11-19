@@ -2,7 +2,7 @@
 
 import os
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,11 @@ class Settings:
     ai_results_stream: str = "famlog:ai.extract-results"
     ai_dlq_stream: str = "famlog:ai.extract:dlq"
     ai_group: str = "ai-workers"
-    llm_provider: str = "fake"  # S18 전까지는 가짜 응답만 (실제 LLM 을 부르지 않는다)
+    llm_provider: str = "fake"  # fake: 가짜 응답(테스트·CI), anthropic: Claude API
+    llm_model: str = "claude-haiku-5-5"
+    llm_max_tokens: int = 2048
+    llm_timeout_seconds: float = 30.0
+    anthropic_api_key: str | None = field(default=None, repr=False)  # 로그·repr 에 나오지 않게
 
     max_attempts: int = 3  # 사양서 20 S9·S16: 실패 재시도 3회 후 DLQ
     max_video_seconds: int = 300  # 동영상 5분 (CHAT-05)
@@ -47,5 +51,7 @@ class Settings:
             s3_secret_key=env.get("S3_SECRET_KEY") or None,
             s3_bucket=env.get("S3_BUCKET_MEDIA", cls.s3_bucket),
             max_video_seconds=int(env.get("MEDIA_MAX_VIDEO_SECONDS", cls.max_video_seconds)),
-            llm_provider=env.get("LLM_PROVIDER", cls.llm_provider),
+            llm_provider=env.get("LLM_PROVIDER") or cls.llm_provider,
+            llm_model=env.get("LLM_MODEL") or cls.llm_model,
+            anthropic_api_key=env.get("ANTHROPIC_API_KEY") or None,
         )

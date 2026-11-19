@@ -16,7 +16,7 @@ import com.famlog.group.domain.FamilyRole;
  * <li>호칭(family_title: 큰아들·막내)이 먼저, 그다음 역할(family_role: 아빠·엄마·아들·딸·할아버지·할머니)</li>
  * <li>같은 역할이 여러 명이면 모두 후보로 돌려 사용자가 고르게 한다</li>
  * <li>"우리·다 같이·모두"와 "가자·하자"처럼 함께하자는 말 → 가족 전체(추정), "나·내가" → 보낸 사람</li>
- * <li>"엄마랑 아빠"처럼 이어 말하면 나눠서 찾고, 뒤에 붙은 조사(가·랑·한테…)는 떼고 본다</li>
+ * <li>"엄마랑 아빠"처럼 이어 말하면 나눠서 찾고, 뒤에 붙은 조사(가·랑·한테…)와 부르는 말(막내야·아들아)은 떼고 본다</li>
  * <li>지금 구성원(members)만 찾는다. 못 찾은 표현은 그대로 남긴다 (카드에 글자로 보여 준다)</li>
  * </ul>
  */
@@ -38,7 +38,7 @@ public final class MemberMatcher {
 
     private static final Pattern SEPARATOR = Pattern.compile("\\s*(?:,|/|및|그리고|이랑|하고|랑)\\s*|(?<=[가-힣])[와과]\\s+");
     private static final List<String> JOSA = List.of("", "가", "이", "은", "는", "도", "을", "를", "랑", "이랑", "하고",
-            "한테", "에게", "께", "께서", "와", "과", "님", "님이", "님은", "님도", "님께", "님한테");
+            "한테", "에게", "께", "께서", "와", "과", "님", "님이", "님은", "님도", "님께", "님한테", "야", "아");
     private static final List<String> SELF = List.of("나", "내", "저", "제");
     private static final List<String> EVERYONE = List.of("우리", "다같이", "모두", "다들", "가족", "온가족", "전부", "다함께",
             "우리가족");

@@ -46,6 +46,7 @@ class ExtractResultHandlerTest extends IntegrationTest {
         assertThat(job).containsEntry("status", "DONE").containsEntry("candidate_count", 0)
                 .containsEntry("model_version", "fake").containsEntry("prompt_version", "none")
                 .containsEntry("input_tokens", 120).containsEntry("output_tokens", 30)
+                .containsEntry("cache_read_tokens", 900).containsEntry("cache_write_tokens", 0)
                 .containsEntry("latency_ms", 850);
         assertThat(job.get("finished_at")).isNotNull();
         assertThat(job.get("error_code")).isNull();
@@ -106,6 +107,8 @@ class ExtractResultHandlerTest extends IntegrationTest {
         result.put("promptVersion", "none");
         result.put("inputTokens", "120");
         result.put("outputTokens", "30");
+        result.put("cacheReadTokens", "900");
+        result.put("cacheWriteTokens", "0");
         result.put("latencyMs", "850");
         return result;
     }

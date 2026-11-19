@@ -4,3 +4,4 @@ boto3==1.43.123
 pillow==13.0.0
 pillow-heif==1.8.1
 pydantic==2.14.2
+anthropic==2.5.0

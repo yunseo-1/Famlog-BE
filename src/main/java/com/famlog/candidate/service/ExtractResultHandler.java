@@ -53,7 +53,9 @@ public class ExtractResultHandler {
         }
         Instant now = Instant.now(clock);
         AiJob.Usage usage = new AiJob.Usage(result.get("modelVersion"), result.get("promptVersion"),
-                intOrNull(result, "inputTokens"), intOrNull(result, "outputTokens"), intOrNull(result, "latencyMs"));
+                intOrNull(result, "inputTokens"), intOrNull(result, "outputTokens"),
+                intOrNull(result, "cacheReadTokens"), intOrNull(result, "cacheWriteTokens"),
+                intOrNull(result, "latencyMs"));
         if ("DONE".equals(result.get("status"))) {
             JsonNode candidates = candidates(result.get("candidates"));
             if (candidates == null) {

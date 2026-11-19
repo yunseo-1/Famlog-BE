@@ -1,5 +1,7 @@
 package com.famlog.candidate.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <ul>
  * <li>구간은 (ai_analyzed_seq, last_seq]. 만들든 안 만들든 기준점을 끝까지 옮긴다 (같은 메시지를 두 번 보내지 않는다)</li>
  * <li>그룹 AI 분석이 꺼졌거나 분석 대상 메시지가 없으면 요청을 만들지 않는다 (AR-10, SET-01)</li>
+ * <li>그룹 하루 상한·월 비용 상한에 닿았으면 만들지 않는다. 그 구간은 다시 분석하지 않는다 (AiCostGuard)</li>
  * <li>구성원은 임시 ID(M1…)와 역할·호칭만, 본문은 마스킹해서 보낸다. 임시 ID 대응은 ai_jobs 에 남긴다</li>
  * </ul>
  * 본문은 로그에 남기지 않는다.
@@ -48,6 +51,8 @@ public class ExtractJobService {
     private final ExtractJobPublisher publisher;
     private final AiProperties properties;
     private final JsonMapper jsonMapper;
+    private final AiCostGuard costGuard;
+    private final Clock clock;
 
     @Transactional
     public Optional<AiJob> create(long roomId, AiTrigger trigger) {
@@ -62,7 +67,8 @@ public class ExtractJobService {
                 ? sourceReader.eligibleMessages(room, fromSeq, toSeq, settings.getAiEnabledAt(),
                         properties.maxMessages())
                 : List.of();
-        if (!sourceReader.advance(roomId, fromSeq, toSeq) || messages.isEmpty()) {
+        if (!sourceReader.advance(roomId, fromSeq, toSeq) || messages.isEmpty()
+                || !costGuard.allows(room.groupId(), Instant.now(clock))) {
             return Optional.empty();
         }
         List<SourceMessage> context = sourceReader.eligibleMessages(room, 0, fromSeq, settings.getAiEnabledAt(),

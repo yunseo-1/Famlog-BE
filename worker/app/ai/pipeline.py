@@ -1,6 +1,7 @@
 """분석 요청 하나를 처리한다: LLM 호출 → 출력 스키마·값 검증 (사양서 7.2, 9.7).
 
-- 출력이 스키마에 맞지 않거나, 근거 메시지가 분석 구간 밖이면 버린다 (FAILED INVALID_OUTPUT, 재시도 안 함)
+- 출력이 스키마에 맞지 않거나(출력 길이 초과 포함), 근거 메시지가 분석 구간 밖이면 버린다 (FAILED INVALID_OUTPUT, 재시도 안 함)
+- 모델이 안전 정책으로 답하지 않으면 FAILED LLM_REFUSED (재시도 안 함)
 - LLM 호출 자체가 실패하면 예외를 그대로 올린다 (소비자가 재시도·DLQ)
 """
 
@@ -25,8 +26,12 @@ def process(job: ExtractJob, client: LlmClient) -> ExtractResult:
         "prompt_version": response.prompt_version,
         "input_tokens": response.input_tokens,
         "output_tokens": response.output_tokens,
+        "cache_read_tokens": response.cache_read_tokens,
+        "cache_write_tokens": response.cache_write_tokens,
         "latency_ms": latency_ms,
     }
+    if response.refused:
+        return ExtractResult(job_id=job.job_id, status="FAILED", error_code="LLM_REFUSED", **usage)
     try:
         output = _validate(job, response.text)
     except InvalidOutput:

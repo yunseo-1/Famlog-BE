@@ -41,7 +41,7 @@ class FailingClient:
 
 def test_가짜_LLM으로_결과를_보내고_요청을_ACK한_뒤_스트림에서_지운다():
     redis = FakeRedis()
-    consumer = AiConsumer(redis, SETTINGS, create_client("fake"))
+    consumer = AiConsumer(redis, SETTINGS, create_client(SETTINGS))
 
     consumer.handle("1-0", fields())
 
@@ -180,7 +180,7 @@ def test_로그에_대화_본문이_남지_않는다(caplog):
     caplog.set_level(logging.DEBUG)
     redis = FakeRedis()
 
-    AiConsumer(redis, SETTINGS, create_client("fake")).handle("1-0", fields())
+    AiConsumer(redis, SETTINGS, create_client(SETTINGS)).handle("1-0", fields())
     consumer = AiConsumer(redis, SETTINGS, FailingClient())
     for attempt in ("1", "2", "3"):
         consumer.handle("x", fields(attempt))

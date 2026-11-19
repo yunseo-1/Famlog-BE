@@ -1,5 +1,6 @@
 package com.famlog.candidate.service;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -16,6 +17,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param contextSize    분석 구간 앞 맥락 최대 개수 (20개)
  * @param maxMessages    한 요청의 분석 구간 최대 개수. 넘으면 최근 것만 보낸다
  * @param streams        Redis Streams 이름 (워커 worker/app/config.py 와 같아야 한다)
+ * @param limits         호출·비용 상한 (사양서 7.2 비용 관리)
+ * @param pricing        모델 단가 (100만 토큰당 달러). 월 비용 계산에 쓴다
  */
 @ConfigurationProperties("famlog.ai")
 public record AiProperties(
@@ -26,7 +29,9 @@ public record AiProperties(
         @DefaultValue("30") int batchSize,
         @DefaultValue("20") int contextSize,
         @DefaultValue("50") int maxMessages,
-        @DefaultValue Streams streams) {
+        @DefaultValue Streams streams,
+        @DefaultValue Limits limits,
+        @DefaultValue Pricing pricing) {
 
     /**
      * @param jobs         API → 워커 분석 요청
@@ -36,5 +41,22 @@ public record AiProperties(
     public record Streams(@DefaultValue("famlog:ai.extract") String jobs,
             @DefaultValue("famlog:ai.extract-results") String results,
             @DefaultValue("famlog-api") String resultsGroup) {
+    }
+
+    /**
+     * @param dailyCallsPerGroup 그룹별 하루(Asia/Seoul) 분석 요청 수. 넘으면 그날 남은 메시지는 분석하지 않는다
+     * @param monthlyBudgetUsd   월(UTC, Console 청구와 같다) 전체 비용 상한. 닿으면 새 요청을 만들지 않는다
+     * @param warnRatio          이 비율을 넘으면 그달에 한 번 경고 로그
+     */
+    public record Limits(@DefaultValue("100") int dailyCallsPerGroup,
+            @DefaultValue("20") BigDecimal monthlyBudgetUsd,
+            @DefaultValue("0.8") BigDecimal warnRatio) {
+    }
+
+    /** 100만 토큰당 달러. input 은 캐시를 거치지 않은 입력 */
+    public record Pricing(@DefaultValue("0.10") BigDecimal input,
+            @DefaultValue("0.50") BigDecimal output,
+            @DefaultValue("0.01") BigDecimal cacheRead,
+            @DefaultValue("0.125") BigDecimal cacheWrite) {
     }
 }
