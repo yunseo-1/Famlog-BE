@@ -109,6 +109,12 @@
 | 11/19 | 월 비용은 UTC 달 기준(Console 청구와 같다), `ai_jobs` 토큰 × 설정 단가. 캐시 토큰 칸 추가(V11) | 사용자 결정 |
 | 11/19 | 평가는 두 단계: 워커가 실제 LLM 결과 저장(`python -m evals.run`, 비용) → API 가 후보 생성 코드로 지표 계산(`./gradlew evalReplay`). 둘 다 CI 제외 | 사용자 결정. 날짜 정확도는 서버 정규화를 거쳐야 잴 수 있다 |
 | 11/19 | 사람 표현의 부르는 말("막내야·딸아")은 떼고 찾는다 | 평가셋 e17 |
+| 11/20 | S19: 후보 카드는 채팅 메시지로 만들지 않는다. 앱이 후보 API의 `anchorMessageId`(마지막 근거 메시지) 아래에 그린다 | 사용자 결정. 사양서 10.2 `type=CANDIDATE` 메시지는 쓰지 않음 |
+| 11/20 | 수정 없이 [등록]하면 서버가 후보 값을 등록 요청으로 바꾼다. 채울 항목·고를 사람·장소 후보 여럿이면 422 `CANDIDATE_MISSING_FIELDS`(fieldErrors) → 앱이 폼을 연다 | 사용자 결정 |
+| 11/20 | 기본값: 일정 참석자 없으면 말한 사람, 별칭에 연결된 장소가 없으면 메모 "장소: …", 끝 시각 없으면 시작과 같게. 기념일은 매년 반복 종일·가족 전원·전날 20시 알림(1주 전·음력은 v1.1). 장소는 승인한 사람이 공유, 한줄평은 AI 요약, 이미 공유된 장소면 연결만 | 사용자 결정 |
+| 11/20 | 되돌리기: 승인한 사람이나 ADMIN 이상, 5분 안. 만든 항목·원문 연결·승인 시스템 메시지를 지운다 | 사용자 결정 |
+| 11/20 | 후보 처리 푸시는 승인 시스템 메시지의 채팅 푸시뿐. 참석자·담당자 개별 푸시·후보 생성 푸시는 S20 알림 설정과 함께 | 사용자 결정 |
+| 11/20 | 일정·할 일·장소 응답에 `source {messageId, seq}` (채팅에서 등록한 항목의 원문). 만료 승인은 409 `CANDIDATE_EXPIRED`. 같은 사람이 다시 처리하면 같은 결과(Idempotency-Key 대신) | 사용자 결정 |
 
 ## 3. Figma 상태
 
@@ -168,8 +174,9 @@
 | S16 | ARC-01 인식 파이프라인 골격: 규칙 필터·30초 멈춤·보조 분석, 마스킹·가명, 워커 소비·DLQ·가짜 LLM, 그룹 AI 설정·개인 제외 | ✅ PR #18 |
 | S17 | ARC-02·04 날짜·시각·구성원 정규화 (단위 테스트 89개, AR-9) | ✅ PR #19 |
 | S18-1 | ARC-02~04·07 후보 생성: 검증·정규화·장소 상위 3개·중복 제거·신뢰도 (가짜 LLM) | ✅ PR #20 |
-| S18-2 | 실제 LLM(claude-haiku-5-5, 캐싱)·프롬프트 extract_v1·호출/비용 상한·평가셋 50건 | ✅ 이번 PR |
-| S19 | ⭐ 후보 API + 앱 카드 | 다음 |
+| S18-2 | 실제 LLM(claude-haiku-5-5, 캐싱)·프롬프트 extract_v1·호출/비용 상한·평가셋 50건 | ✅ PR #21 |
+| S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ 이번 PR |
+| S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
 모바일 S6·S7은 `Famlog-moblie`에서 완료(2026-11-17).
@@ -364,6 +371,32 @@
 - `dedupKey`: `유형|정규화 제목|날짜`(기념일 `MM-DD`, 장소 `PLACE|kakao:ID` 또는 `PLACE|name:이름`). 같은 그룹 저장은 advisory lock으로 하나씩
 - 만료 `expires_at`: 일정 시각(종일은 다음 날 0시), 나머지·날짜 없는 일정은 7일 뒤
 
+### 후보 API 규칙 (S19, 앱 S19 참고)
+
+**목록** `GET /groups/{groupId}/candidates?status=&type=&fromSeq=&toSeq=&cursor=&size=` — 최신 순, `{items, nextCursor}`
+- `status` 기본 PENDING, 여러 개 가능 (`status=PENDING,APPROVED`). 만료된 PENDING 은 빠진다
+- `fromSeq`·`toSeq`: 카드를 붙일 메시지(`anchorSeq`) 범위. 채팅 화면은 보이는 메시지 범위로 `PENDING,APPROVED` 를 받아 카드·Resolved Chip 을 그린다
+- 항목 `{id, groupId, type, status, fields, inferred, missingFields, confidence, surface, anchorMessageId, anchorSeq, version, decidedBy, decidedAt, dismissReason, entityType, entityId, linkedExisting, expiresAt, createdAt}`
+  - `surface`: `CARD`(0.75 이상, 채팅방 카드) / `INBOX`(제안함에만). 제안함(SCR-14)은 둘 다 보여 준다
+  - `fields`·`inferred`·`missingFields` 형태는 위 "후보 생성 규칙"
+**상세** `GET /candidates/{id}` → `{candidate, evidence:[{messageId, seq, senderId, sentAt, spans, text}]}` (지운 메시지는 `text` null)
+
+**승인** `POST /candidates/{id}/approve` `{version, schedule? | todo? | place?}` → `{candidate}`
+- 값 없이 보내면 후보 값 그대로. 못 바꾸면 422 `CANDIDATE_MISSING_FIELDS`, `fieldErrors[].field` = `title`·`date`·`attendeeIds`·`assigneeIds`·`kakaoPlaceId`·`name` → 수정 폼(SCR-13)
+- 수정 폼 값: 일정·기념일은 일정 등록 요청(`ScheduleRequest`), 할 일은 할 일 등록 요청, 장소는 `{kakaoPlaceId(후보 options 중 하나나 방금 검색한 것), category, oneLineReview}`. 후보 값과 다르면 EDITED 로 기록
+- 409 `CANDIDATE_ALREADY_DECIDED`(message 예: "엄마님이 먼저 등록했어요."), `CANDIDATE_EXPIRED`, `VERSION_CONFLICT`. 같은 사람이 다시 보내면 200 같은 결과
+- 성공하면 채팅에 시스템 메시지 "○○님이 '…' 일정을 캘린더에 등록했어요." (payload `{kind:"CANDIDATE_APPROVED", userId, candidateId, entityType, entityId}`) → 다른 가족에게 채팅 푸시
+- `entityType` SCHEDULE(기념일 포함)·TODO·PLACE, `linkedExisting` true 면 이미 공유된 장소에 연결
+
+**무시** `POST /candidates/{id}/dismiss` `{version, reason?: ALREADY_REGISTERED | JOKE | WRONG}`. 무시한 내용은 다시 제안하지 않는다
+**되돌리기** `POST /candidates/{id}/undo` — 승인한 사람·ADMIN 이상, 5분 안 (아니면 403 `CANDIDATE_NOT_UNDOABLE`). 항목·원문 연결을 지우고 승인 시스템 메시지는 `message.deleted` (앱은 지운 시스템 메시지를 숨긴다)
+
+**WebSocket** `/sub/groups/{groupId}`
+- `candidate.created`: 목록 항목과 같은 형태 (새 후보만. 근거만 늘어난 경우는 보내지 않는다)
+- `candidate.resolved`: `{groupId, candidateId, status, decidedBy, decidedByName, entityType, entityId, linkedExisting}` → "엄마가 등록했어요" 로 바꾼다
+
+**원문 보기 (ARC-06)**: 일정(상세·기간 조회 회차)·할 일·장소 응답의 `source {messageId, seq}` (채팅에서 등록했으면, 아니면 null)
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
@@ -373,7 +406,7 @@
 - S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
 - S20: 비용 80%·상한 도달을 로그 대신 관리자 알림으로. 사용자: 처리방침용 Anthropic 데이터 처리 조건(학습 사용·보관 기간) 확인(S22 전)
 - 프롬프트·모델을 바꾸면 `worker/evals/README.md` 순서로 평가하고 기록 표에 남긴다 (실제 호출은 사용자 확인 후)
-- S19: 후보 조회·승인·무시·되돌리기 API, `candidate.*` 이벤트, `item_sources`·`suggestion_feedback`, 기존 항목 수정·완료 후보(`target_ref`), 만료 후보 거르기
+- 다음(S20~): 기존 항목 수정·완료 후보(`target_ref`, "11시 말고 12시로"·"샀어"), 근거만 늘어난 후보의 이벤트, 후보 [신고](MOD-01), 참석자·담당자 개별 푸시, 기념일 1주 전 알림·음력(v1.1), 만료 후보 정리 배치
 - S20: AI 분석 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS`/`OVERSEAS_TRANSFER` 동의, 관리자가 구성원의 분석 제외 여부를 보는 화면(8.8), 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리
 - S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인

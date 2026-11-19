@@ -35,4 +35,12 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
               and m.deletedAt is null
             """)
     long countUnread(@Param("roomId") Long roomId, @Param("afterSeq") long afterSeq, @Param("userId") Long userId);
+
+    /** 후보 승인 시스템 메시지 (되돌리기에서 지운다) */
+    @Query(value = """
+            SELECT * FROM messages
+            WHERE room_id = :roomId AND type = 'SYSTEM' AND deleted_at IS NULL
+              AND payload ->> 'kind' = 'CANDIDATE_APPROVED' AND (payload ->> 'candidateId')::bigint = :candidateId
+            """, nativeQuery = true)
+    List<Message> findCandidateApprovals(@Param("roomId") long roomId, @Param("candidateId") long candidateId);
 }

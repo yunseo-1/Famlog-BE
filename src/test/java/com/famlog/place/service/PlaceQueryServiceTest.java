@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
 import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.place.repository.LocationAccessLogRepository;
 import com.famlog.place.repository.PlaceMarkRepository;
@@ -30,7 +31,7 @@ class PlaceQueryServiceTest {
         PlaceProperties off = new PlaceProperties("https://dapi.kakao.com", "", Duration.ofHours(1),
                 Duration.ofMinutes(10), 30, Duration.ofMinutes(1), false, 50, 100, Map.of());
         PlaceQueryService service = new PlaceQueryService(places, mock(PlaceMarkRepository.class), logs, checker,
-                mock(ConsentRepository.class), off, Clock.systemUTC());
+                mock(ItemSources.class), mock(ConsentRepository.class), off, Clock.systemUTC());
 
         assertThatThrownBy(() -> service.nearby(1, 2, 37.5, 127.0, 3))
                 .isInstanceOfSatisfying(BusinessException.class,

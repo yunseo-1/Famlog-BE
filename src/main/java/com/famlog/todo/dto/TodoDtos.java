@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import com.famlog.common.source.SourceRef;
 import com.famlog.todo.domain.Todo;
 import com.famlog.todo.domain.TodoKind;
 
@@ -65,12 +66,12 @@ public final class TodoDtos {
 
     public record TodoResponse(long id, long groupId, TodoKind kind, String title, Long assigneeId,
             LocalDate dueDate, boolean done, Instant doneAt, Long doneBy, long createdBy, long version,
-            Instant createdAt, Instant updatedAt) {
+            Instant createdAt, Instant updatedAt, SourceRef source) {
 
-        public static TodoResponse from(Todo todo) {
+        public static TodoResponse from(Todo todo, SourceRef source) {
             return new TodoResponse(todo.getId(), todo.getGroupId(), todo.getKind(), todo.getTitle(),
                     todo.getAssigneeId(), todo.getDueDate(), todo.isDone(), todo.getDoneAt(), todo.getDoneBy(),
-                    todo.getCreatedBy(), todo.getVersion(), todo.getCreatedAt(), todo.getUpdatedAt());
+                    todo.getCreatedBy(), todo.getVersion(), todo.getCreatedAt(), todo.getUpdatedAt(), source);
         }
     }
 

@@ -1,14 +1,19 @@
 package com.famlog.chat.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Map;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import com.famlog.candidate.event.CandidateEvents.CandidateApproved;
+import com.famlog.candidate.event.CandidateEvents.CandidateUndone;
 import com.famlog.chat.domain.ChatRoom;
 import com.famlog.chat.domain.Message;
 import com.famlog.chat.dto.ChatDtos.ChatEvent;
+import com.famlog.chat.dto.ChatDtos.MessageDeleted;
 import com.famlog.chat.event.MessagePosted;
 import com.famlog.chat.relay.ChatRelay;
 import com.famlog.chat.repository.ChatRoomRepository;
@@ -42,6 +47,7 @@ class SystemMessageListener {
     static final String MEMBER_LEFT = "MEMBER_LEFT";
     static final String MEMBER_KICKED = "MEMBER_KICKED";
     static final String TODO_DONE = "TODO_DONE";
+    static final String CANDIDATE_APPROVED = "CANDIDATE_APPROVED";
 
     private final ChatRoomRepository roomRepository;
     private final MessageRepository messageRepository;
@@ -51,6 +57,7 @@ class SystemMessageListener {
     private final ChatRelay relay;
     private final JsonMapper jsonMapper;
     private final ApplicationEventPublisher events;
+    private final Clock clock;
 
     @EventListener
     void onJoined(MemberJoined event) {
@@ -77,6 +84,27 @@ class SystemMessageListener {
         Message message = post(room, event.groupId(), event.userId(), "님이 '" + event.title() + "' 할 일을 완료했어요.",
                 Map.of("kind", TODO_DONE, "userId", event.userId(), "todoId", event.todoId()));
         broadcast(event.groupId(), message);
+    }
+
+    /** AI 후보 승인 (사양서 6.2 ⑤). 채팅 푸시는 다른 시스템 메시지처럼 승인한 사람을 뺀 가족에게 간다 */
+    @EventListener
+    void onCandidateApproved(CandidateApproved event) {
+        ChatRoom room = lockRoom(event.groupId());
+        Message message = post(room, event.groupId(), event.userId(), event.what(),
+                Map.of("kind", CANDIDATE_APPROVED, "userId", event.userId(), "candidateId", event.candidateId(),
+                        "entityType", event.entityType(), "entityId", event.entityId()));
+        broadcast(event.groupId(), message);
+    }
+
+    /** 승인을 되돌리면 그 시스템 메시지를 지운다 */
+    @EventListener
+    void onCandidateUndone(CandidateUndone event) {
+        ChatRoom room = roomRepository.findByGroupId(event.groupId()).orElseThrow();
+        for (Message message : messageRepository.findCandidateApprovals(room.getId(), event.candidateId())) {
+            message.delete(Instant.now(clock));
+            relay.toGroup(event.groupId(), ChatEvent.MESSAGE_DELETED,
+                    new MessageDeleted(event.groupId(), message.getId(), message.getSeq()));
+        }
     }
 
     private ChatRoom lockRoom(long groupId) {

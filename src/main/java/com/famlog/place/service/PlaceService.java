@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.famlog.chat.service.ChatService;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
 import com.famlog.group.domain.GroupRole;
 import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.place.domain.Place;
+import com.famlog.place.domain.PlaceCategory;
 import com.famlog.place.domain.PlaceMark;
 import com.famlog.place.domain.PlaceMarkKind;
 import com.famlog.place.dto.PlaceDtos.PlaceMarksResponse;
@@ -43,6 +45,7 @@ public class PlaceService {
     private final PlaceSearchService searchService;
     private final GroupAccessChecker accessChecker;
     private final ChatService chatService;
+    private final ItemSources itemSources;
 
     @Transactional
     public PlaceResponse share(long groupId, long userId, SharePlaceRequest request) {
@@ -64,14 +67,35 @@ public class PlaceService {
         if (!Boolean.FALSE.equals(request.shareToChat())) {
             chatService.postPlace(groupId, userId, place.getName(), cardOf(place));
         }
-        return PlaceResponse.of(place, List.of());
+        return PlaceResponse.of(place, List.of(), null);
+    }
+
+    /** @param created 새로 공유했는지 (false 면 이미 공유된 장소에 연결) */
+    public record Registered(Place place, boolean created) {
+    }
+
+    /**
+     * AI 후보 승인으로 공유한다 (사양서 6.2 ⑤). 후보에 저장해 둔 카카오 장소 값을 쓴다.
+     * 이미 우리 가족이 공유한 장소면 새로 만들지 않고 그 장소를 돌려준다. 채팅 장소 카드는 올리지 않는다 (승인 시스템 메시지가 대신한다)
+     */
+    @Transactional
+    public Registered registerFromCandidate(long groupId, long userId, Place.KakaoInfo info, PlaceCategory category,
+            String oneLineReview) {
+        accessChecker.requireMember(groupId, userId);
+        List<Place> existing = placeRepository.findByGroupIdAndKakaoPlaceIdIn(groupId, List.of(info.kakaoPlaceId()));
+        if (!existing.isEmpty()) {
+            return new Registered(existing.get(0), false);
+        }
+        return new Registered(placeRepository.saveAndFlush(new Place(groupId, userId, info, category, null,
+                blankToNull(oneLineReview))), true);
     }
 
     @Transactional(readOnly = true)
     public PlaceResponse get(long placeId, long userId) {
         Place place = find(placeId);
         accessChecker.requireMemberOrNotFound(place.getGroupId(), userId);
-        return PlaceResponse.of(place, markRepository.findByPlaceIdIn(List.of(placeId)));
+        return PlaceResponse.of(place, markRepository.findByPlaceIdIn(List.of(placeId)),
+                itemSources.find(ItemSources.PLACE, placeId));
     }
 
     @Transactional
@@ -87,13 +111,15 @@ public class PlaceService {
             place.changeOneLineReview(request.getOneLineReview().map(PlaceService::blankToNull).orElse(null));
         }
         placeRepository.saveAndFlush(place);
-        return PlaceResponse.of(place, markRepository.findByPlaceIdIn(List.of(placeId)));
+        return PlaceResponse.of(place, markRepository.findByPlaceIdIn(List.of(placeId)),
+                itemSources.find(ItemSources.PLACE, placeId));
     }
 
     /** 일정·별칭의 연결은 비워지고 표시는 함께 지워진다 (FK). 채팅의 장소 카드는 남는다 */
     @Transactional
     public void delete(long placeId, long userId) {
         placeRepository.delete(editable(placeId, userId));
+        itemSources.removeAll(ItemSources.PLACE, placeId);
     }
 
     /** 내 표시 켜기. 이미 켜져 있어도 그대로 성공 */

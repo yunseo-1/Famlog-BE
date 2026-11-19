@@ -5,7 +5,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * 공통 에러 응답 (사양서 11.1). fieldErrors는 VALIDATION_FAILED일 때만 들어간다.
+ * 공통 에러 응답 (사양서 11.1). fieldErrors는 VALIDATION_FAILED(잘못된 칸)와 CANDIDATE_MISSING_FIELDS(채워야 할 항목)일 때만 들어간다.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ErrorResponse(String code, String message, String traceId, List<FieldError> fieldErrors) {

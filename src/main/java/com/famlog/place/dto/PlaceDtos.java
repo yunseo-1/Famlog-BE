@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+import com.famlog.common.source.SourceRef;
 import com.famlog.place.domain.Place;
 import com.famlog.place.domain.PlaceAlias;
 import com.famlog.place.domain.PlaceCategory;
@@ -82,14 +83,14 @@ public final class PlaceDtos {
     public record PlaceResponse(long id, long groupId, String kakaoPlaceId, String name, PlaceCategory category,
             String categoryDetail, String address, String region1, String region2, String region3, double lat,
             double lng, String phone, String placeUrl, Integer rating, String oneLineReview, long sharedBy,
-            PlaceMarksResponse marks, Instant createdAt, Instant updatedAt) {
+            PlaceMarksResponse marks, Instant createdAt, Instant updatedAt, SourceRef source) {
 
-        public static PlaceResponse of(Place place, List<PlaceMark> marks) {
+        public static PlaceResponse of(Place place, List<PlaceMark> marks, SourceRef source) {
             return new PlaceResponse(place.getId(), place.getGroupId(), place.getKakaoPlaceId(), place.getName(),
                     place.getCategory(), place.getCategoryDetail(), place.getAddress(), place.getRegion1(),
                     place.getRegion2(), place.getRegion3(), place.getLat(), place.getLng(), place.getPhone(),
                     place.getPlaceUrl(), place.getRating(), place.getOneLineReview(), place.getSharedBy(),
-                    PlaceMarksResponse.of(marks), place.getCreatedAt(), place.getUpdatedAt());
+                    PlaceMarksResponse.of(marks), place.getCreatedAt(), place.getUpdatedAt(), source);
         }
     }
 

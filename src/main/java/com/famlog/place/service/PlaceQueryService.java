@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.source.ItemSources;
+import com.famlog.common.source.SourceRef;
 import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.place.domain.LocationAccessLog;
 import com.famlog.place.domain.LocationPurpose;
@@ -63,6 +65,7 @@ public class PlaceQueryService {
     private final PlaceMarkRepository markRepository;
     private final LocationAccessLogRepository accessLogRepository;
     private final GroupAccessChecker accessChecker;
+    private final ItemSources itemSources;
     private final ConsentRepository consentRepository;
     private final PlaceProperties properties;
     private final Clock clock;
@@ -147,19 +150,24 @@ public class PlaceQueryService {
         Map<Long, Place> places = placeRepository.findAllById(rows.stream().map(PlaceRepository.NearbyRow::getId)
                 .toList()).stream().collect(Collectors.toMap(Place::getId, Function.identity()));
         Map<Long, List<PlaceMark>> marks = marksOf(places.keySet());
+        Map<Long, SourceRef> sources = itemSources.find(ItemSources.PLACE, places.keySet());
         List<NearbyPlaceResponse> items = rows.stream()
                 .filter(row -> places.containsKey(row.getId()))
                 .map(row -> new NearbyPlaceResponse(
-                        PlaceResponse.of(places.get(row.getId()), marks.getOrDefault(row.getId(), List.of())),
+                        PlaceResponse.of(places.get(row.getId()), marks.getOrDefault(row.getId(), List.of()),
+                                sources.get(row.getId())),
                         Math.round(row.getDistance())))
                 .toList();
         return new NearbyListResponse(items);
     }
 
     private List<PlaceResponse> withMarks(List<Place> places) {
-        Map<Long, List<PlaceMark>> marks = marksOf(places.stream().map(Place::getId).toList());
+        List<Long> ids = places.stream().map(Place::getId).toList();
+        Map<Long, List<PlaceMark>> marks = marksOf(ids);
+        Map<Long, SourceRef> sources = itemSources.find(ItemSources.PLACE, ids);
         return places.stream()
-                .map(place -> PlaceResponse.of(place, marks.getOrDefault(place.getId(), List.of())))
+                .map(place -> PlaceResponse.of(place, marks.getOrDefault(place.getId(), List.of()),
+                        sources.get(place.getId())))
                 .toList();
     }
 

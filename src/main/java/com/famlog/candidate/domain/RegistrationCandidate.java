@@ -23,7 +23,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * AI 가 만든 등록 후보 (사양서 6장). 승인 전에는 캘린더·할 일·장소 목록에 나타나지 않는다.
- * 승인·무시·되돌리기는 S19 에서 붙인다.
+ * 상태: PENDING → APPROVED(→ 5분 안에 UNDONE) / DISMISSED. 먼저 처리한 사람이 반영된다 (version).
  */
 @Getter
 @Entity
@@ -77,6 +77,23 @@ public class RegistrationCandidate extends BaseTimeEntity {
     @Column(name = "prompt_version", updatable = false)
     private String promptVersion;
 
+    @Column(name = "decided_by")
+    private Long decidedBy;
+
+    @Column(name = "decided_at")
+    private Instant decidedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dismiss_reason")
+    private DismissReason dismissReason;
+
+    /** SCHEDULE, TODO, PLACE, 이미 공유된 장소에 연결했으면 PLACE_LINKED */
+    @Column(name = "created_entity_type")
+    private String createdEntityType;
+
+    @Column(name = "created_entity_id")
+    private Long createdEntityId;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
@@ -105,5 +122,31 @@ public class RegistrationCandidate extends BaseTimeEntity {
     /** 아직 처리할 수 있는 후보 (PENDING 이고 만료 전) */
     public boolean isOpen(Instant now) {
         return status == CandidateStatus.PENDING && expiresAt.isAfter(now);
+    }
+
+    public boolean isExpired(Instant now) {
+        return status == CandidateStatus.PENDING && !expiresAt.isAfter(now);
+    }
+
+    public void approve(long userId, Instant now, String entityType, long entityId) {
+        decide(CandidateStatus.APPROVED, userId, now);
+        this.createdEntityType = entityType;
+        this.createdEntityId = entityId;
+    }
+
+    public void dismiss(long userId, Instant now, DismissReason reason) {
+        decide(CandidateStatus.DISMISSED, userId, now);
+        this.dismissReason = reason;
+    }
+
+    /** 승인을 되돌린다. 처리한 사람·시각은 승인 때 그대로 둔다 */
+    public void undo() {
+        this.status = CandidateStatus.UNDONE;
+    }
+
+    private void decide(CandidateStatus next, long userId, Instant now) {
+        this.status = next;
+        this.decidedBy = userId;
+        this.decidedAt = now;
     }
 }

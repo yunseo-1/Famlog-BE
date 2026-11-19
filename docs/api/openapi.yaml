@@ -128,6 +128,130 @@ paths:
       summary: 소셜 가입
       tags:
       - auth-controller
+  /api/v1/candidates/{candidateId}:
+    get:
+      description: 근거 메시지(본문·보낸 사람·시각·추출 부분) 포함. 다른 그룹 후보면 404
+      operationId: getCandidate
+      parameters:
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CandidateDetailResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 후보 하나
+      tags:
+      - candidate-controller
+  /api/v1/candidates/{candidateId}/approve:
+    post:
+      description: "값을 안 보내면 후보 값 그대로 등록. 채울 항목이 있거나 골라야 하면 422 CANDIDATE_MISSING_FIELDS\
+        \ (fieldErrors 에 항목) → 수정 폼에서 유형에 맞는 값(schedule·todo·place) 하나를 보낸다. 다른 가족\
+        이 먼저 처리했으면 409 CANDIDATE_ALREADY_DECIDED, 만료면 409 CANDIDATE_EXPIRED. 같은 사람\
+        이 다시 보내면 같은 결과"
+      operationId: approveCandidate
+      parameters:
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 후보 승인 (등록)
+      tags:
+      - candidate-controller
+  /api/v1/candidates/{candidateId}/dismiss:
+    post:
+      description: 사유는 선택 (ALREADY_REGISTERED·JOKE·WRONG). 무시한 내용은 다시 제안하지 않는다
+      operationId: dismissCandidate
+      parameters:
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 후보 무시
+      tags:
+      - candidate-controller
+  /api/v1/candidates/{candidateId}/undo:
+    post:
+      description: 승인한 가족이나 ADMIN 이상이 5분 안에 (아니면 403 CANDIDATE_NOT_UNDOABLE). 만든 항목과
+        승인 시스템 메시지를 지운다
+      operationId: undoCandidate
+      parameters:
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 승인 되돌리기
+      tags:
+      - candidate-controller
   /api/v1/devices/token:
     delete:
       description: 이 기기로 푸시를 받지 않는다. 없으면 그대로 204
@@ -289,6 +413,86 @@ paths:
       summary: 그룹과 구성원
       tags:
       - group-controller
+  /api/v1/groups/{groupId}/candidates:
+    get:
+      description: "최신 순 커서 페이징. status 기본 PENDING(만료 제외), 여러 개 가능. 채팅 화면은 status=PENDING,APPROVED\
+        \ 와 보이는 메시지의 seq 범위(fromSeq~toSeq, 카드를 붙일 메시지 기준)로 부른다. surface: CARD(신뢰도\
+        \ 0.75 이상, 채팅방 카드) / INBOX(제안함에만)"
+      operationId: listCandidates
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - PENDING
+            - APPROVED
+            - DISMISSED
+            - EXPIRED
+            - UNDONE
+          uniqueItems: true
+      - in: query
+        name: type
+        required: false
+        schema:
+          type: string
+          enum:
+          - SCHEDULE
+          - ANNIVERSARY
+          - TODO
+          - PLACE
+      - description: 카드를 붙일 메시지 seq 이상
+        in: query
+        name: fromSeq
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - description: 카드를 붙일 메시지 seq 이하
+        in: query
+        name: toSeq
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          maximum: 100
+          minimum: 1
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CandidateListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 후보 목록
+      tags:
+      - candidate-controller
   /api/v1/groups/{groupId}/invites:
     post:
       description: 7일 유효. 재발급하면 이전 코드는 바로 만료
@@ -2126,6 +2330,44 @@ components:
         place:
           $ref: "#/components/schemas/PlaceSummary"
           description: 연결한 장소 (없거나 지워졌으면 null)
+    ApprovePlace:
+      type: object
+      properties:
+        category:
+          type: string
+          enum:
+          - RESTAURANT
+          - CAFE
+          - TRAVEL
+          - LIFE
+          - ETC
+        kakaoPlaceId:
+          type: string
+          maxLength: 30
+          minLength: 0
+        oneLineReview:
+          type: string
+          description: 한줄평
+          maxLength: 100
+          minLength: 0
+      required:
+      - category
+      - kakaoPlaceId
+    ApproveRequest:
+      type: object
+      properties:
+        place:
+          $ref: "#/components/schemas/ApprovePlace"
+        schedule:
+          $ref: "#/components/schemas/ScheduleRequest"
+        todo:
+          $ref: "#/components/schemas/CreateTodoRequest"
+        version:
+          type: integer
+          format: int64
+          description: 조회한 후보의 version
+      required:
+      - version
     AuthResponse:
       type: object
       properties:
@@ -2133,6 +2375,106 @@ components:
           $ref: "#/components/schemas/TokenResponse"
         user:
           $ref: "#/components/schemas/UserResponse"
+    CandidateDetailResponse:
+      type: object
+      properties:
+        candidate:
+          $ref: "#/components/schemas/CandidateResponse"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceResponse"
+    CandidateListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CandidateResponse"
+        nextCursor:
+          type: string
+          description: 다음 페이지 커서. 없으면 끝
+    CandidateResponse:
+      type: object
+      properties:
+        anchorMessageId:
+          type: integer
+          format: int64
+        anchorSeq:
+          type: integer
+          format: int64
+        confidence:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: integer
+          format: int64
+        dismissReason:
+          type: string
+          enum:
+          - ALREADY_REGISTERED
+          - JOKE
+          - WRONG
+        entityId:
+          type: integer
+          format: int64
+        entityType:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        fields:
+          type: object
+          additionalProperties: {}
+          description: 정규화한 값 (유형별 형태는 HANDOFF 후보 생성 규칙)
+        groupId:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        inferred:
+          type: array
+          description: AI 추정 항목 ("추정" 배지)
+          items:
+            type: string
+        linkedExisting:
+          type: boolean
+        missingFields:
+          type: array
+          description: 채워야 등록되는 항목
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - DISMISSED
+          - EXPIRED
+          - UNDONE
+        surface:
+          type: string
+          enum:
+          - CARD
+          - INBOX
+        type:
+          type: string
+          enum:
+          - SCHEDULE
+          - ANNIVERSARY
+          - TODO
+          - PLACE
+        version:
+          type: integer
+          format: int64
+          description: 승인·무시할 때 보낸다
     ChangeRoleRequest:
       type: object
       properties:
@@ -2264,6 +2606,11 @@ components:
           format: int64
       required:
       - groupId
+    DecisionResponse:
+      type: object
+      properties:
+        candidate:
+          $ref: "#/components/schemas/CandidateResponse"
     DeviceRequest:
       type: object
       properties:
@@ -2285,6 +2632,21 @@ components:
       required:
       - deviceId
       - platform
+    DismissRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: 선택
+          enum:
+          - ALREADY_REGISTERED
+          - JOKE
+          - WRONG
+        version:
+          type: integer
+          format: int64
+      required:
+      - version
     ErrorResponse:
       properties:
         code:
@@ -2298,12 +2660,14 @@ components:
           - GROUP_ROLE_REQUIRED
           - LOCATION_CONSENT_REQUIRED
           - MESSAGE_NOT_DELETABLE
+          - CANDIDATE_NOT_UNDOABLE
           - AGE_RESTRICTED
           - NOT_FOUND
           - USER_NOT_REGISTERED
           - METHOD_NOT_ALLOWED
           - CANDIDATE_ALREADY_DECIDED
           - VERSION_CONFLICT
+          - CANDIDATE_EXPIRED
           - GROUP_LIMIT_EXCEEDED
           - OWNER_TRANSFER_REQUIRED
           - PLACE_ALREADY_SHARED
@@ -2320,6 +2684,28 @@ components:
         message:
           type: string
         traceId:
+          type: string
+    EvidenceResponse:
+      type: object
+      properties:
+        messageId:
+          type: integer
+          format: int64
+        senderId:
+          type: integer
+          format: int64
+        sentAt:
+          type: string
+          format: date-time
+        seq:
+          type: integer
+          format: int64
+        spans:
+          type: array
+          description: 추출한 부분 (원문 강조용)
+          items:
+            type: string
+        text:
           type: string
     FieldError:
       properties:
@@ -2679,6 +3065,8 @@ components:
         scheduleId:
           type: integer
           format: int64
+        source:
+          $ref: "#/components/schemas/SourceRef"
         startDate:
           type: string
           format: date
@@ -2763,6 +3151,8 @@ components:
         sharedBy:
           type: integer
           format: int64
+        source:
+          $ref: "#/components/schemas/SourceRef"
         updatedAt:
           type: string
           format: date-time
@@ -3051,6 +3441,8 @@ components:
             - DAY_1
         rrule:
           type: string
+        source:
+          $ref: "#/components/schemas/SourceRef"
         startDate:
           type: string
           format: date
@@ -3203,6 +3595,16 @@ components:
       - device
       - nickname
       - providerToken
+    SourceRef:
+      type: object
+      description: 채팅에서 등록한 항목의 원문 메시지 (직접 등록했으면 null)
+      properties:
+        messageId:
+          type: integer
+          format: int64
+        seq:
+          type: integer
+          format: int64
     TodoListResponse:
       type: object
       properties:
@@ -3247,6 +3649,8 @@ components:
           enum:
           - TASK
           - SHOPPING
+        source:
+          $ref: "#/components/schemas/SourceRef"
         title:
           type: string
         updatedAt:
