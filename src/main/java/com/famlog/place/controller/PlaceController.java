@@ -55,7 +55,7 @@ public class PlaceController {
     private final PlaceService placeService;
     private final PlaceQueryService queryService;
 
-    @Operation(summary = "장소 검색 (카카오 로컬)", description = "한 쪽 15개. x·y(현재 위치나 지도 중심)를 주면 가까운 순. "
+    @Operation(summary = "장소 검색 (카카오 로컬)", description = "한 쪽 15개. x·y(지도 중심, 또는 위치 동의한 경우 현재 위치)를 주면 가까운 순. "
             + "groupId 를 주면 그 그룹에 이미 공유된 장소에 sharedPlaceId 를 넣는다. 사용자당 분당 30회")
     @GetMapping("/api/v1/places/search")
     SearchResponse searchPlaces(AuthUser user, @RequestParam @NotBlank @Size(max = 100) String query,
@@ -102,7 +102,7 @@ public class PlaceController {
     }
 
     @Operation(summary = "내 주변 장소", description = "가까운 순 최대 50곳. 현재 위치는 저장하지 않는다. "
-            + "기능이 꺼져 있으면 404 (앱은 버튼을 숨긴다)")
+            + "기능이 꺼져 있으면 404 (앱은 버튼을 숨긴다), 위치기반서비스 동의가 없으면 403 LOCATION_CONSENT_REQUIRED")
     @GetMapping("/api/v1/groups/{groupId}/places/nearby")
     NearbyListResponse nearbyPlaces(AuthUser user, @PathVariable long groupId,
             @RequestParam @DecimalMin("-90") @DecimalMax("90") double lat,

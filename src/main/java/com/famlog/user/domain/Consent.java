@@ -49,4 +49,10 @@ public class Consent extends BaseTimeEntity {
         this.docVersion = docVersion;
         this.agreedAt = agreedAt;
     }
+
+    public void withdraw(Instant now) {
+        if (withdrawnAt == null) {
+            withdrawnAt = now;
+        }
+    }
 }

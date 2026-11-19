@@ -39,6 +39,8 @@ import com.famlog.place.dto.PlaceDtos.RegionCountResponse;
 import com.famlog.place.repository.LocationAccessLogRepository;
 import com.famlog.place.repository.PlaceMarkRepository;
 import com.famlog.place.repository.PlaceRepository;
+import com.famlog.user.domain.ConsentType;
+import com.famlog.user.repository.ConsentRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -47,7 +49,8 @@ import lombok.RequiredArgsConstructor;
  * <ul>
  * <li>목록: 시·도 → 시·군·구, 공유한 사람, 카테고리, 지도 화면 영역을 함께 걸 수 있다. 최신 공유 순 커서 페이징</li>
  * <li>지역별 개수: 공유한 사람·카테고리 필터를 같이 적용한 시·도/시·군·구별 개수 (배지)</li>
- * <li>내 주변: 현재 좌표는 이 요청에만 쓰고 저장·로그하지 않는다. 쓸 때마다 location_access_logs 에 남긴다 (8.6)</li>
+ * <li>내 주변: 위치기반서비스 동의(LOCATION)가 있어야 한다 (없으면 403). 현재 좌표는 이 요청에만 쓰고 저장·로그하지 않는다.
+ * 쓸 때마다 location_access_logs 에 남긴다 (8.6)</li>
  * </ul>
  */
 @Service
@@ -60,6 +63,7 @@ public class PlaceQueryService {
     private final PlaceMarkRepository markRepository;
     private final LocationAccessLogRepository accessLogRepository;
     private final GroupAccessChecker accessChecker;
+    private final ConsentRepository consentRepository;
     private final PlaceProperties properties;
     private final Clock clock;
 
@@ -134,6 +138,9 @@ public class PlaceQueryService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         accessChecker.requireMember(groupId, userId);
+        if (!consentRepository.existsByUserIdAndTypeAndWithdrawnAtIsNull(userId, ConsentType.LOCATION)) {
+            throw new BusinessException(ErrorCode.LOCATION_CONSENT_REQUIRED);
+        }
         accessLogRepository.save(new LocationAccessLog(userId, LocationPurpose.NEARBY, Instant.now(clock)));
         List<PlaceRepository.NearbyRow> rows = placeRepository.findNearby(groupId, lat, lng, radiusKm * 1000,
                 NEARBY_LIMIT);

@@ -767,7 +767,8 @@ paths:
       - place-controller
   /api/v1/groups/{groupId}/places/nearby:
     get:
-      description: 가까운 순 최대 50곳. 현재 위치는 저장하지 않는다. 기능이 꺼져 있으면 404 (앱은 버튼을 숨긴다)
+      description: "가까운 순 최대 50곳. 현재 위치는 저장하지 않는다. 기능이 꺼져 있으면 404 (앱은 버튼을 숨긴다), 위치\
+        기반서비스 동의가 없으면 403 LOCATION_CONSENT_REQUIRED"
       operationId: nearbyPlaces
       parameters:
       - in: path
@@ -1354,8 +1355,8 @@ paths:
       - message-controller
   /api/v1/places/search:
     get:
-      description: 한 쪽 15개. x·y(현재 위치나 지도 중심)를 주면 가까운 순. groupId 를 주면 그 그룹에 이미 공유된
-        장소에 sharedPlaceId 를 넣는다. 사용자당 분당 30회
+      description: "한 쪽 15개. x·y(지도 중심, 또는 위치 동의한 경우 현재 위치)를 주면 가까운 순. groupId 를 주\
+        면 그 그룹에 이미 공유된 장소에 sharedPlaceId 를 넣는다. 사용자당 분당 30회"
       operationId: searchPlaces
       parameters:
       - in: query
@@ -1729,6 +1730,66 @@ paths:
       summary: 할 일 수정·완료
       tags:
       - todo-controller
+  /api/v1/users/me/consents:
+    get:
+      description: 종류 5개 모두. reconsentRequired=true 면 문서가 바뀌어 다시 받아야 한다
+      operationId: listConsents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 동의 상태
+      tags:
+      - consent-controller
+  /api/v1/users/me/consents/{type}:
+    put:
+      description: "지금은 LOCATION(위치기반서비스 이용약관 + 개인위치정보 수집·이용)만. 동의 {agreed:true, docVersion}(현\
+        재 버전과 다르면 400), 철회 {agreed:false} → 내가 올린 사진의 위치도 지운다. TERMS·PRIVACY·AI_ANALYSIS·\
+        OVERSEAS_TRANSFER 는 400"
+      operationId: updateConsent
+      parameters:
+      - in: path
+        name: type
+        required: true
+        schema:
+          type: string
+          enum:
+          - TERMS
+          - PRIVACY
+          - AI_ANALYSIS
+          - OVERSEAS_TRANSFER
+          - LOCATION
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConsentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 동의·철회
+      tags:
+      - consent-controller
   /api/v1/users/me/current-group:
     put:
       description: 구성원인 그룹만. 아니면 403 GROUP_NOT_MEMBER
@@ -2052,6 +2113,35 @@ components:
           items:
             type: integer
             format: int64
+    ConsentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsentResponse"
+    ConsentResponse:
+      type: object
+      properties:
+        agreed:
+          type: boolean
+        agreedAt:
+          type: string
+          format: date-time
+        currentVersion:
+          type: string
+        docVersion:
+          type: string
+        reconsentRequired:
+          type: boolean
+        type:
+          type: string
+          enum:
+          - TERMS
+          - PRIVACY
+          - AI_ANALYSIS
+          - OVERSEAS_TRANSFER
+          - LOCATION
     CreateAliasRequest:
       type: object
       properties:
@@ -2146,6 +2236,7 @@ components:
           - AUTH_INVALID
           - GROUP_NOT_MEMBER
           - GROUP_ROLE_REQUIRED
+          - LOCATION_CONSENT_REQUIRED
           - MESSAGE_NOT_DELETABLE
           - AGE_RESTRICTED
           - NOT_FOUND
@@ -3106,6 +3197,19 @@ components:
         refreshTokenExpiresAt:
           type: string
           format: date-time
+    UpdateConsentRequest:
+      type: object
+      properties:
+        agreed:
+          type: boolean
+        docVersion:
+          type: string
+          description: 동의할 때 앱이 보여 준 문서 버전
+          example: "1.0"
+          maxLength: 20
+          minLength: 0
+      required:
+      - agreed
     UpdateMyMemberRequest:
       type: object
       properties:

@@ -132,6 +132,7 @@ famlog:
   consent:
     terms-version: "1.0"
     privacy-version: "1.0"
+    location-version: "1.0"   # 위치기반서비스 이용약관 + 개인위치정보 수집·이용 (선택)
   # 요청 제한 (사양서 9.6). 메시지 초당 5개(WebSocket)는 S8, AI 요청 그룹별 상한은 S16에서 추가
   rate-limit:
     enabled: true

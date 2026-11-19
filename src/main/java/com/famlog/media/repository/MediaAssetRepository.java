@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +29,10 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from MediaAsset m where m.id = :id")
     Optional<MediaAsset> findByIdForUpdate(@Param("id") Long id);
+
+    /** 위치 동의를 철회하면 그 사람이 올린 사진의 위치를 지운다 (사양서 8.3). location 은 엔티티에 없어 SQL 로 */
+    @Modifying
+    @Query(value = "UPDATE media_assets SET location = NULL WHERE uploader_id = :userId AND location IS NOT NULL",
+            nativeQuery = true)
+    int clearLocations(@Param("userId") long userId);
 }
