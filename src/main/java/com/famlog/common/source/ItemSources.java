@@ -44,19 +44,32 @@ public class ItemSources {
         jdbcTemplate.update("DELETE FROM item_sources WHERE entity_type = ? AND entity_id = ?", entityType, entityId);
     }
 
-    /** 항목별 원문 (가장 먼저 말한 메시지). 원문이 없는 항목은 빠진다 */
+    /**
+     * 항목별 원문 (가장 먼저 말한 메시지). 원문이 없는 항목은 빠진다.
+     * candidateId: 그 메시지를 근거로 이 항목을 만든(장소는 기존 장소에 연결한) 승인 후보, 여럿이면 먼저 승인한 것
+     */
     public Map<Long, SourceRef> find(String entityType, Collection<Long> entityIds) {
         Map<Long, SourceRef> sources = new HashMap<>();
         if (entityIds.isEmpty()) {
             return sources;
         }
         jdbcTemplate.query("""
-                SELECT DISTINCT ON (s.entity_id) s.entity_id, m.id, m.seq
+                SELECT DISTINCT ON (s.entity_id) s.entity_id, m.id, m.seq, c.id
                 FROM item_sources s JOIN messages m ON m.id = s.message_id
+                LEFT JOIN LATERAL (
+                    SELECT rc.id FROM candidate_evidence ce
+                    JOIN registration_candidates rc ON rc.id = ce.candidate_id
+                    WHERE ce.message_id = s.message_id AND rc.status = 'APPROVED'
+                      AND rc.created_entity_id = s.entity_id
+                      AND (rc.created_entity_type = s.entity_type
+                           OR (s.entity_type = 'PLACE' AND rc.created_entity_type = 'PLACE_LINKED'))
+                    ORDER BY rc.decided_at, rc.id LIMIT 1) c ON TRUE
                 WHERE s.entity_type = ? AND s.entity_id = ANY (?)
                 ORDER BY s.entity_id, m.seq
                 """, rs -> {
-            sources.put(rs.getLong(1), new SourceRef(rs.getLong(2), rs.getLong(3)));
+            long candidateId = rs.getLong(4);
+            sources.put(rs.getLong(1), new SourceRef(rs.getLong(2), rs.getLong(3),
+                    rs.wasNull() ? null : candidateId));
         }, entityType, entityIds.toArray(Long[]::new));
         return sources;
     }

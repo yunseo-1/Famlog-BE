@@ -3599,6 +3599,10 @@ components:
       type: object
       description: 채팅에서 등록한 항목의 원문 메시지 (직접 등록했으면 null)
       properties:
+        candidateId:
+          type: integer
+          format: int64
+          description: 이 메시지를 근거로 항목을 등록한 후보 (찾을 수 없으면 null)
         messageId:
           type: integer
           format: int64
