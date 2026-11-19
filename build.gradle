@@ -67,9 +67,26 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'eval'
+    }
     // 테스트 DB 이미지(infra/postgres)를 빌드할 때 저장소 루트 기준 경로를 쓴다
     systemProperty 'famlog.repoRoot', rootDir.absolutePath
+}
+
+// AI 평가셋 2단계: worker/evals/out/results.jsonl(실제 LLM 결과)을 후보 생성 코드에 통과시켜 지표를 출력한다 (사양서 7.3)
+// 1단계(실제 API 호출, 비용 발생)는 worker/evals/README.md
+tasks.register('evalReplay', Test) {
+    description = 'AI 평가셋 지표(일치율·오탐률·날짜 정확도)를 출력한다'
+    group = 'verification'
+    useJUnitPlatform {
+        includeTags 'eval'
+    }
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty 'famlog.repoRoot', rootDir.absolutePath
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
 }
 
 // API 계약 docs/api/openapi.yaml 을 지금 코드로 다시 만든다 (Docker 필요: 테스트 컨텍스트로 생성)

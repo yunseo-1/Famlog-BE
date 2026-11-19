@@ -369,6 +369,14 @@ class FlywayMigrationTest extends IntegrationTest {
                 String.class, jobId)).isEqualTo("PENDING");
     }
 
+    @Test
+    void V11_AI_요청_기록에_캐시_토큰_수를_남긴다() {
+        List<String> columns = jdbcTemplate.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'ai_jobs'", String.class);
+
+        assertThat(columns).contains("cache_read_tokens", "cache_write_tokens");
+    }
+
     private static final String CANDIDATE_INSERT = "INSERT INTO registration_candidates (group_id, room_id, job_id, "
             + "type, fields, confidence, dedup_key, expires_at) VALUES (?, ?, ?, ?, '{}', ?, 'k', now())";
 
