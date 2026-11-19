@@ -1,5 +1,8 @@
 package com.famlog.notification.service;
 
+import java.time.Clock;
+import java.time.Instant;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +20,10 @@ import com.famlog.notification.repository.NotificationSettingsRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 알림 설정 (사양서 4.1 SET-02): 사용자 단위(미리보기 숨기기·방해 금지), 그룹 단위(알림 끄기). */
+/**
+ * 알림 설정 (사양서 4.1 SET-02): 사용자 단위(미리보기 숨기기·방해 금지), 그룹 단위(알림 끄기).
+ * 그룹 단위 설정에는 내 메시지 AI 분석 제외(SET-01)도 함께 둔다 (관리자도 바꿀 수 없다, 사양서 8.8).
+ */
 @Service
 @RequiredArgsConstructor
 public class NotificationSettingsService {
@@ -25,6 +31,7 @@ public class NotificationSettingsService {
     private final NotificationSettingsRepository settingsRepository;
     private final GroupMemberRepository memberRepository;
     private final GroupAccessChecker accessChecker;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public NotificationSettingsResponse get(long userId) {
@@ -50,8 +57,16 @@ public class NotificationSettingsService {
     @Transactional
     public GroupPreferencesResponse updateGroupPreferences(long groupId, long userId,
             GroupPreferencesRequest request) {
+        if (request.notifMuted() == null && request.aiOptOut() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "바꿀 설정을 보내 주세요.");
+        }
         GroupMember member = activeMember(groupId, userId);
-        member.muteNotifications(request.notifMuted());
+        if (request.notifMuted() != null) {
+            member.muteNotifications(request.notifMuted());
+        }
+        if (request.aiOptOut() != null) {
+            member.changeAiOptOut(request.aiOptOut(), Instant.now(clock));
+        }
         return GroupPreferencesResponse.from(member);
     }
 

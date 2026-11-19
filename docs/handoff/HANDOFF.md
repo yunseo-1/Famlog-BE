@@ -84,6 +84,13 @@
 | 11/19 | 동의 API는 사양서 11.3대로 GET·PUT만(철회는 `{agreed:false}`), 지금은 LOCATION만. AI 분석·국외 이전은 S16 | 모바일 요청 (S15-2 내 주변 전) |
 | 11/19 | 내 주변은 위치 동의가 있어야 한다(403 `LOCATION_CONSENT_REQUIRED`). 장소 검색의 x·y는 막지 않는다 | 지도 중심일 수 있어 서버가 구분 못 함. 앱이 동의 시에만 현재 위치를 보낸다 |
 | 11/19 | 추천 카테고리(`suggestedCategory`): 카카오 `CT1`(문화시설)은 `ETC`. 관광명소 `AT4`·숙박 `AD5`만 `TRAVEL` | 영화관·공연장이 여행지로 추천됨 (모바일 실기기 확인). 이미 공유된 장소는 그대로 |
+| 11/19 | S16은 LLM을 부르지 않는다(워커 `LLM_PROVIDER=fake`). 제공자·모델·월 비용 상한·그룹별 하루 상한은 S18에서 정한다 | 사양서 20 S16 "가짜 응답으로 끝까지" |
+| 11/19 | 그룹 AI 분석은 `group_settings.ai_analysis_enabled`(기본 꺼짐), `GET·PATCH /groups/{id}/settings`(변경 ADMIN 이상)를 S16에서 만듦. 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS` 동의는 S20 | S19 앱에서 켜 볼 방법이 필요 |
+| 11/19 | 개인 분석 제외는 `group_members.ai_opt_out`, `PATCH .../members/me/preferences`의 `aiOptOut`. 제외했던 동안의 메시지는 다시 켜도 보내지 않는다(`ai_opt_out_changed_at`) | 사양서 8.7 "큐에도 넣지 않는다" |
+| 11/19 | AI를 켜기 전 대화는 분석·앞 맥락 모두 보내지 않는다 (켜는 순간 `chat_rooms.ai_analyzed_seq`를 마지막 seq로) | 사용자 결정 |
+| 11/19 | 마스킹·가명 처리(M1…)는 API에서. 가리지 않은 원문은 Redis에 들어가지 않고, 처리한 스트림 항목은 ACK 후 지운다. DLQ에는 jobId·오류만 | 사양서 8.7 |
+| 11/19 | 분석 대상은 사람이 보낸 TEXT(삭제 제외)만. 사진·장소·시스템 메시지는 분석도 앞 맥락도 아님 | 장소 공유는 이미 등록된 것 |
+| 11/19 | 보조 분석(30개·10분)은 규칙 필터에 안 걸린 메시지도 보낸다 | 사양서 4.5 ARC-01 그대로, 비용 상한은 S18 |
 
 ## 3. Figma 상태
 
@@ -139,8 +146,9 @@
 | S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ PR #10 |
 | S11 | NOTI-01 FCM 푸시 + SET-02 알림 설정 API + 새 기기 로그인 알림 | ✅ PR #12 |
 | S12 | SCH-01~05 일정·반복·리마인드·공휴일·겹침, TODO-01 할 일 | ✅ PR #13 |
-| S14 | PLC-01~06 장소 공유·지역/구성원 목록·내 주변·다녀옴·별칭, 일정 장소 연결 | ✅ 이번 PR |
-| S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | 다음 |
+| S14 | PLC-01~06 장소 공유·지역/구성원 목록·내 주변·다녀옴·별칭, 일정 장소 연결 | ✅ PR #15 |
+| S16 | ARC-01 인식 파이프라인 골격: 규칙 필터·30초 멈춤·보조 분석, 마스킹·가명, 워커 소비·DLQ·가짜 LLM, 그룹 AI 설정·개인 제외 | ✅ 이번 PR |
+| S17~S19 | ⭐ 날짜·구성원 정규화, LLM 추출·후보 생성, 후보 API | 다음 (S17) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
 모바일 S6·S7은 `Famlog-moblie`에서 완료(2026-11-17).
@@ -282,6 +290,23 @@
 - 응답 `{id, alias, place:{id,name,address,category}|null, addressText, createdBy, createdAt}`, 목록은 가나다 순
 - 삭제는 만든 사람 또는 ADMIN 이상, 다른 그룹 별칭 id → 404
 
+### AI 분석 규칙 (S16, 앱 S19·S20 참고)
+
+**그룹 설정** `GET|PATCH /groups/{groupId}/settings` — `{aiAnalysisEnabled}` → `{aiAnalysisEnabled, aiEnabledAt}`
+- 기본 꺼짐. 조회는 구성원, 변경은 ADMIN 이상(MEMBER 403 `GROUP_ROLE_REQUIRED`), 값 없으면 400
+- 켜면 그 뒤 메시지부터 분석한다 (켜기 전 대화는 보내지 않는다)
+
+**개인 분석 제외** `PATCH /groups/{groupId}/members/me/preferences` — `{notifMuted?, aiOptOut?}` 보낸 값만 (둘 다 없으면 400). 응답 `{notifMuted, aiOptOut}`
+- 본인만 바꾼다 (관리자도 못 바꾼다, 사양서 8.8). 제외했던 동안의 메시지는 다시 켜도 보내지 않는다
+
+**트리거** (서버 안, API 계약 아님)
+- 분석 대상: 그룹 AI 켜짐 + 사람이 보낸 TEXT + 보낸 사람이 분석 제외 안 함. 아니면 Redis·스트림 어디에도 넣지 않는다 (AR-10)
+- 규칙 필터에 걸리면 마지막 메시지 30초 뒤, 안 걸리면 10분 뒤, 30개 쌓이면 바로. 5초마다 꺼내 `famlog:ai.extract`로 보낸다
+- 요청: 구간 메시지(최대 50) + 앞 맥락 최대 20 + 구성원 `{ref:"M1", familyRole, familyTitle}` + 발송 시각(+09:00), 본문은 전화·계좌·카드·주민번호·이메일 마스킹
+- `ai_jobs`에 요청 기록(구간, 임시 ID 대응, 상태, 모델·프롬프트 버전, 토큰, 지연). 원문 컬럼 없음
+- 워커: 소비 그룹 `ai-workers`, 재시도 3회 후 DLQ(`famlog:ai.extract:dlq`), LLM 출력은 pydantic 스키마 + 근거 메시지가 구간 안인지 검증, 실패는 `INVALID_OUTPUT`
+- 결과(`famlog:ai.extract-results`) → `ai_jobs` DONE/FAILED. 후보 저장은 S18
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
@@ -289,14 +314,15 @@
 - 출시 전: 위치기반서비스 신고 확인 후 `photo-location-enabled` 켜기, "사진 위치 사용" 동의 API(설정 화면)
 - S20: 푸시 발송 실패 재시도 (지금은 한 번 보내고 실패는 로그만). 계정 삭제(ACC-01)는 전 세션 폐기를 부르면 토큰도 함께 지워진다
 - S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
-- S16~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
+- S18: LLM 제공자·모델 선택(데이터 학습 미사용·무보관 조건), `prompts/extract_v1.md`, 그룹별 하루 호출 상한·월 비용 상한, 후보 저장(`registration_candidates`·`candidate_evidence`)
+- S20: AI 분석 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS`/`OVERSEAS_TRANSFER` 동의, 관리자가 구성원의 분석 제외 여부를 보는 화면(8.8), 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리
 - S16~: 등록 후보의 장소 검색은 `PlaceSearchService`(캐시·문서 보관) 재사용, "할머니 댁"은 별칭과 매칭 (사양서 06)
 - S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인
 - S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지
 - v1.1: 반복 일정 "이번 회차만" 수정·삭제, 음력 반복(DIF-04), 장보기 목록(TODO-02)
 - 매년: 다음 해 공휴일 마이그레이션 (2028년분은 2027년 하반기에, 우주항공청 월력요항 기준)
-- S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리, `group_settings`(AI 분석 설정)
+- S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리
 - 모바일 요청 검토: `GET /users/me` (지금은 앱이 로그인 응답의 user를 저장해 씀)
 - 자리 값: 캘린더 팔레트 뒤 8색(디자인 확정 시), 초대 링크 도메인 `famlog.app`(App Links 도메인 확정 시)
 
@@ -327,6 +353,9 @@
 | 11.3 (S14) | 검색 `page`·`groupId`, 목록 지도 영역(`swLat` 등)·커서, `GET /places/{id}`, `PUT·DELETE /places/{id}/marks/{kind}`(PLC-05), 별칭 삭제 `/place-aliases/{aliasId}`, 일정 요청 `placeId`·응답 `place` |
 | 8.6 (S14) | 장소 검색에 현재 위치를 보내면 `PLACE_SEARCH`로 기록 |
 | 11.2·11.3 (위치 동의) | 에러 코드 `LOCATION_CONSENT_REQUIRED`(403), `PUT /users/me/consents/{type}` 요청 `{agreed, docVersion}`·지금은 LOCATION만, 내 주변은 위치 동의 필요 |
+| 10.2 (S16) | `group_settings`(group_id PK, ai_analysis_enabled 기본 false, ai_enabled_by, ai_enabled_at), `group_members.ai_opt_out_changed_at`, `chat_rooms.ai_analyzed_seq`, `ai_jobs` 컬럼(위 "AI 분석 규칙") |
+| 11.3 (S16) | `GET·PATCH /groups/{id}/settings` 요청·응답 `aiAnalysisEnabled`, preferences에 `aiOptOut`(보낸 값만) |
+| 8.7 (S16) | 켜기 전 대화·제외했던 동안의 메시지는 보내지 않음, 스트림 항목은 처리 후 삭제 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -360,3 +389,4 @@
 | 2026-11-19 | PLC-01~06 | 카카오 로컬 검색 프록시(결과 캐시·요청 제한), 장소 공유·채팅 장소 카드·푸시, 지역·공유자·카테고리·지도 영역 목록, 지역별 개수, 내 주변(PostGIS, 좌표 비저장·위치 이용 기록·플래그), 다녀옴·가고 싶어요, 별칭 장소, 일정 장소 연결(V8) | feat(S14) |
 | 2026-11-19 | PLC-04 | 위치기반서비스 동의 API(`GET·PUT /users/me/consents`, LOCATION만, 버전 확인·이력 보존·철회 시 사진 위치 삭제), 내 주변은 동의 필요(403) | feat(PLC-04) |
 | 2026-11-19 | PLC-01 | 추천 카테고리: 카카오 문화시설(`CT1`, 영화관·공연장 포함)을 여행지 대신 기타로 | fix(PLC-01) |
+| 2026-11-19 | ARC-01·SET-01 | AI 인식 파이프라인 골격: 규칙 필터·30초 멈춤·보조 분석(30개·10분) 트리거, 마스킹·가명(M1…), Redis Streams 요청·결과, 워커 소비·재시도·DLQ·가짜 LLM·출력 검증, 그룹 AI 분석 설정·개인 분석 제외, `ai_jobs` 기록(V9) | feat(S16) |

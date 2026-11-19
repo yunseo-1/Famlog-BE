@@ -396,11 +396,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
           description: 실패. code 로 원인을 구분한다
-      summary: 이 그룹 알림 설정
+      summary: 이 그룹 알림·AI 분석 제외 설정
       tags:
       - notification-settings-controller
     patch:
-      description: 끄면 이 그룹의 새 메시지 푸시가 오지 않는다
+      description: "보낸 값만 바꾼다. 알림을 끄면 새 메시지 푸시가 오지 않고, AI 분석 제외를 켜면 내 메시지를 AI 분석에\
+        \ 보내지 않는다 (제외했던 동안의 메시지는 다시 켜도 보내지 않는다)"
       operationId: updateGroupPreferences
       parameters:
       - in: path
@@ -428,7 +429,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
           description: 실패. code 로 원인을 구분한다
-      summary: 이 그룹 알림 끄기·켜기
+      summary: 이 그룹 알림·AI 분석 제외 바꾸기
       tags:
       - notification-settings-controller
   /api/v1/groups/{groupId}/members/{userId}:
@@ -1058,6 +1059,65 @@ paths:
       summary: 겹치는 일정
       tags:
       - schedule-controller
+  /api/v1/groups/{groupId}/settings:
+    get:
+      description: AI 분석 켜짐 여부. 설정한 적이 없으면 꺼짐
+      operationId: get_1
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSettingsResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 그룹 설정
+      tags:
+      - group-settings-controller
+    patch:
+      description: ADMIN 이상. AI 분석을 켜면 그 뒤 메시지부터 분석한다 (켜기 전 대화는 보내지 않는다)
+      operationId: update_1
+      parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGroupSettingsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSettingsResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 그룹 설정 바꾸기
+      tags:
+      - group-settings-controller
   /api/v1/groups/{groupId}/todos:
     get:
       description: "안 한 일(기한 이른 순, 기한 없음은 뒤) 다음에 완료한 일(최근 완료 순). done 으로 한쪽만 볼 수 있\
@@ -2290,16 +2350,27 @@ components:
     GroupPreferencesRequest:
       type: object
       properties:
+        aiOptOut:
+          type: boolean
+          description: 내 메시지 AI 분석 제외 (이 그룹)
         notifMuted:
           type: boolean
           description: 이 그룹 알림 끄기
-      required:
-      - notifMuted
     GroupPreferencesResponse:
       type: object
       properties:
+        aiOptOut:
+          type: boolean
         notifMuted:
           type: boolean
+    GroupSettingsResponse:
+      type: object
+      properties:
+        aiAnalysisEnabled:
+          type: boolean
+        aiEnabledAt:
+          type: string
+          format: date-time
     GroupSummaryResponse:
       type: object
       properties:
@@ -3210,6 +3281,14 @@ components:
           minLength: 0
       required:
       - agreed
+    UpdateGroupSettingsRequest:
+      type: object
+      properties:
+        aiAnalysisEnabled:
+          type: boolean
+          description: AI 분석 켜기 (채팅에서 일정·할 일·장소 후보를 찾는다)
+      required:
+      - aiAnalysisEnabled
     UpdateMyMemberRequest:
       type: object
       properties:

@@ -128,6 +128,15 @@ famlog:
       OL7: LIFE         # 주유소·충전소
       SW8: LIFE         # 지하철역
       PK6: LIFE         # 주차장
+  # AI 대화 분석 (사양서 4.5 ARC-01, 6.2 ①, 8.7). 그룹 AI 분석이 켜진 그룹의 분석 대상 메시지만 워커(famlog:ai.extract)로 보낸다
+  ai:
+    enabled: true          # 전체 끄기 스위치
+    ticker-enabled: true   # 5초마다 분석 시각이 된 방을 꺼낸다. 테스트는 끄고 직접 부른다
+    pause: 30s             # 규칙 필터에 걸린 뒤 대화가 멈추면
+    batch-idle: 10m        # 보조 분석: 대화가 멈추면
+    batch-size: 30         # 보조 분석: 분석 안 된 메시지가 쌓이면 바로
+    context-size: 20       # 앞 맥락
+    max-messages: 50       # 한 요청의 분석 구간 최대 (넘으면 최근 것만)
   # 현재 약관 버전 (사양서 8.3). 정책 문서(S22)를 고치면 올린다
   consent:
     terms-version: "1.0"

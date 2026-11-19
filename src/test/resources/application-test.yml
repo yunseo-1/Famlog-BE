@@ -7,7 +7,9 @@ logging:
   level:
     com.famlog: DEBUG
 
-# 리마인드 스케줄러는 테스트가 시각을 정해 직접 부른다 (ReminderService.sendDue)
+# 리마인드·AI 트리거 스케줄러는 테스트가 시각을 정해 직접 부른다 (ReminderService.sendDue, AiTriggerService.runDue)
 famlog:
   schedule:
     reminder-enabled: false
+  ai:
+    ticker-enabled: false

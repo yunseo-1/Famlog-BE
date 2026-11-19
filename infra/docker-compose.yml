@@ -87,6 +87,7 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA}
+      LLM_PROVIDER: fake    # AI 대화 분석: S18 전까지는 가짜 응답만 (실제 LLM 호출 없음)
     depends_on:
       redis:
         condition: service_healthy

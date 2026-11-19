@@ -7,7 +7,6 @@ import com.famlog.notification.domain.NotificationSettings;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -62,14 +61,16 @@ public final class NotificationDtos {
         }
     }
 
+    /** 바꿀 값만 보낸다. 둘 다 없으면 400 */
     public record GroupPreferencesRequest(
-            @Schema(description = "이 그룹 알림 끄기") @NotNull Boolean notifMuted) {
+            @Schema(description = "이 그룹 알림 끄기") Boolean notifMuted,
+            @Schema(description = "내 메시지 AI 분석 제외 (이 그룹)") Boolean aiOptOut) {
     }
 
-    public record GroupPreferencesResponse(boolean notifMuted) {
+    public record GroupPreferencesResponse(boolean notifMuted, boolean aiOptOut) {
 
         public static GroupPreferencesResponse from(GroupMember member) {
-            return new GroupPreferencesResponse(member.isNotifMuted());
+            return new GroupPreferencesResponse(member.isNotifMuted(), member.isAiOptOut());
         }
     }
 }
