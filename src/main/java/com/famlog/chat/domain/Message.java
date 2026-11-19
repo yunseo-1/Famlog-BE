@@ -95,6 +95,18 @@ public class Message extends BaseTimeEntity {
         return message;
     }
 
+    /** 장소 카드 (PLC-01). body = 장소 이름, payload = 공유한 순간의 장소 요약 */
+    public static Message place(long roomId, long seq, long senderId, String placeName, String payload) {
+        Message message = new Message();
+        message.roomId = roomId;
+        message.seq = seq;
+        message.senderId = senderId;
+        message.type = MessageType.PLACE;
+        message.body = placeName;
+        message.payload = payload;
+        return message;
+    }
+
     public static Message system(long roomId, long seq, String body, String payload) {
         Message message = new Message();
         message.roomId = roomId;

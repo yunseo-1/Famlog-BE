@@ -230,6 +230,60 @@ class FlywayMigrationTest extends IntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void V8_장소_좌표에서_geom이_만들어지고_같은_그룹에_같은_카카오_장소는_하나다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+        String insert = "INSERT INTO places (group_id, kakao_place_id, name, category, address, region1, lat, lng, "
+                + "shared_by) VALUES (?, 'k-1', '냉면집', 'RESTAURANT', '서울 송파구', '서울', 37.5, 127.1, ?) RETURNING id";
+
+        long id = jdbcTemplate.queryForObject(insert, Long.class, groupId, userId);
+        assertThat(jdbcTemplate.queryForObject("SELECT ST_AsText(geom::geometry) FROM places WHERE id = ?",
+                String.class, id)).isEqualTo("POINT(127.1 37.5)");
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(insert, Long.class, groupId, userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V8_장소_별점은_1에서_5다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+        String insert = "INSERT INTO places (group_id, kakao_place_id, name, category, address, region1, lat, lng, "
+                + "rating, shared_by) VALUES (?, ?, '집', ?, '서울', '서울', 37.5, 127.1, ?, ?)";
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, groupId, "k-2", "RESTAURANT", 6, userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V8_정의되지_않은_장소_카테고리는_저장되지_않는다() {
+        long userId = insertUser("엄마");
+        long groupId = jdbcTemplate.queryForObject(
+                "INSERT INTO family_groups (name, created_by) VALUES ('우리 가족', ?) RETURNING id", Long.class, userId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update("INSERT INTO places (group_id, kakao_place_id, name, category, "
+                + "address, region1, lat, lng, shared_by) VALUES (?, 'k-3', '집', 'PARK', '서울', '서울', 37.5, 127.1, ?)",
+                groupId, userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void V8_위치_이용_기록에_장소_검색_목적이_더해졌고_좌표_컬럼은_없다() {
+        long userId = insertUser("엄마");
+        List<String> columns = jdbcTemplate.queryForList(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'location_access_logs'",
+                String.class);
+
+        assertThat(columns).containsExactlyInAnyOrder("id", "user_id", "purpose", "target_id", "accessed_at");
+        assertThat(jdbcTemplate.update("INSERT INTO location_access_logs (user_id, purpose) VALUES (?, 'PLACE_SEARCH')",
+                userId)).isEqualTo(1);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO location_access_logs (user_id, purpose) VALUES (?, 'TRACKING')", userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private static final String MESSAGE_INSERT = "INSERT INTO messages (room_id, seq, sender_id, client_message_id, "
             + "type, body) VALUES (?, ?, ?, ?::uuid, 'TEXT', '안녕')";
 

@@ -5,7 +5,7 @@
 - 담당자: 김윤서 (기획·백엔드·안드로이드, 1인 개발)
 - **이 사본은 백엔드 저장소(`Famlog-BE`) 기준이다.** 서버·워커·인프라 진행은 여기 8장에 기록한다.
   Android 진행은 모바일 저장소(`Famlog-moblie`)의 HANDOFF, 사양 원본은 문서 레포(`Famlog`)에 있다.
-- 최종 갱신: 2026-11-18 (S1~S5·S8·S9·S11·S12 완료)
+- 최종 갱신: 2026-11-19 (S1~S5·S8·S9·S11·S12·S14 완료)
 
 ---
 
@@ -74,6 +74,13 @@
 | 11/18 | 할 일 완료는 구성원 누구나, 내용 수정·삭제는 등록한 사람·ADMIN 이상. 채팅방 한 줄 알림은 완료 요청의 `announce=true`일 때만 | 장 봐 온 사람이 체크. 그룹 설정화는 S20 |
 | 11/18 | 공휴일은 마이그레이션으로 해마다 추가 (2026~2027 V7). 자동 갱신·관리자 수정은 S20 | 공공데이터 API 키 필요 |
 | 11/18 | 시스템 메시지(입장·퇴장·할 일 완료)의 이름도 그룹 호칭이 있으면 호칭, 없으면 닉네임. 이미 남은 메시지는 그대로 | 앱 구성원 표시·푸시 `senderName`과 맞춤 (모바일 요청) |
+| 11/19 | 장소 좌표는 `lat`·`lng` 컬럼 + DB 생성 컬럼 `geom`(geography). 거리 검색만 PostGIS SQL | hibernate-spatial 없이 (새 라이브러리 없음) |
+| 11/19 | 공유는 `kakaoPlaceId`만 받고, 서버가 검색 때 Redis에 1시간 남겨 둔 카카오 결과로 저장 | 앱이 보낸 이름·좌표를 믿지 않는다. 카카오에 id 조회 API가 없음 |
+| 11/19 | 검색에 x·y(위치)를 보내면 개인위치정보 이용으로 기록(`PLACE_SEARCH`), 목록 캐시 안 함 | 사양서 8.6 |
+| 11/19 | 지역은 카카오 지번 주소에서: 시·도는 짧은 이름(서울·경기·강원), 일반구는 "수원시 영통구", 세종은 시·군·구 없음 | 카카오 region 표기와 맞춤 |
+| 11/19 | 같은 그룹에 같은 카카오 장소는 하나 (409 `PLACE_ALREADY_SHARED`). 장소 수정·삭제는 공유한 사람·ADMIN 이상, 낙관적 잠금 없음 | 10.2 places에 version 없음 |
+| 11/19 | 내 주변 기능 플래그는 설정값 `famlog.place.nearby-enabled` (꺼지면 404). DB `feature_flags`·관리 화면은 S20 | 사양서 8.6 출시 전 할 일 |
+| 11/19 | 한글 목록 정렬(별칭·지역)은 DB가 아니라 서버 코드에서 가나다(유니코드) 순 | DB 정렬 규칙(collation)에 따라 한글 순서가 달라짐 |
 
 ## 3. Figma 상태
 
@@ -128,9 +135,9 @@
 | S8 | CHAT-01~04·06 서버 (STOMP, seq, 읽음) + 입장·퇴장 시스템 메시지 | ✅ PR #8 |
 | S9 | CHAT-05 미디어 업로드 + 워커 썸네일·EXIF 정리 | ✅ PR #10 |
 | S11 | NOTI-01 FCM 푸시 + SET-02 알림 설정 API + 새 기기 로그인 알림 | ✅ PR #12 |
-| S12 | SCH-01~05 일정·반복·리마인드·공휴일·겹침, TODO-01 할 일 | ✅ 이번 PR |
-| S14 | PLC-01~06 | 다음 |
-| S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | |
+| S12 | SCH-01~05 일정·반복·리마인드·공휴일·겹침, TODO-01 할 일 | ✅ PR #13 |
+| S14 | PLC-01~06 장소 공유·지역/구성원 목록·내 주변·다녀옴·별칭, 일정 장소 연결 | ✅ 이번 PR |
+| S16~S19 | ⭐ ARC 자동 등록 (워커 포함) | 다음 |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
 모바일 S6·S7은 `Famlog-moblie`에서 완료(2026-11-17).
@@ -184,7 +191,7 @@
 | `silent` | `"true"`면 방해 금지 시간 → 소리·진동 없이 |
 | `sentAt` | +09:00 ISO-8601 |
 | `groupId`, `groupName` | CHAT_MESSAGE·MEMBER_REMOVED. 묶음 키는 `groupId` |
-| `messageId`, `seq`, `messageType` | CHAT_MESSAGE. `messageType` = TEXT·IMAGE·VIDEO·SYSTEM(입장·퇴장) |
+| `messageId`, `seq`, `messageType` | CHAT_MESSAGE. `messageType` = TEXT·IMAGE·VIDEO·PLACE(장소 카드, S14)·SYSTEM(입장·퇴장) |
 | `senderId`, `senderName` | CHAT_MESSAGE 중 사람이 보낸 것. 이름은 그룹 호칭(`familyTitle`)이 있으면 호칭, 없으면 닉네임 |
 | `mediaCount` | IMAGE·VIDEO |
 | `body` | TEXT·SYSTEM이고 받는 사람이 미리보기를 숨기지 않았을 때만. 100자 넘으면 잘라서 `…`. **숨김이면 키 자체가 없다** |
@@ -203,6 +210,7 @@
 - `GET·PATCH /api/v1/groups/{groupId}/members/me/preferences {notifMuted}`: 이 그룹 알림 끄기. 구성원이 아니면 403
 
 **서버 설정**: `infra/.env`의 `FIREBASE_CREDENTIALS_PATH`(서비스 계정 키 경로, `~/` 가능). 비어 있으면 보내지 않고 로그만 남긴다 (CI·테스트). 운영은 `FAMLOG_PUSH_CREDENTIALS_PATH`
+`infra/.env`의 `KAKAO_REST_API_KEY`(카카오 로컬 검색, 비밀). 비어 있으면 장소 검색만 500. 운영은 `FAMLOG_PLACE_KAKAO_REST_API_KEY`
 
 ### 일정·할 일 규칙 (S12, 앱 S13 참고)
 
@@ -219,7 +227,8 @@
   - `memberIds`·`roles`(여러 개, 반복 파라미터): 그 구성원이 참여하는 일정만. 둘 다 주면 합집합. 역할은 이 그룹에서의 `familyRole`
 - 겹침 `GET /schedules/conflicts?startsAt=&endsAt=&memberIds=&excludeId=` → `{items:[{scheduleId, title, allDay, startsAt, endsAt, userIds}]}`. `userIds`는 요청한 구성원 중 그 일정 참여자. 딱 붙은 일정은 겹침 아님. 쿼리의 `+`는 `%2B`로
 - 리마인드: 서버가 1분마다 보낸다(푸시 규칙의 `SCHEDULE_REMINDER`). 알림 시각이 등록·수정보다 앞이면 보내지 않는다 (20:30에 내일 일정을 넣으면 전날 20:00 알림은 없음). 서버가 멈췄다 켜지면 지난 5분까지만 보낸다
-- 음력(`calendar_type`·`lunar_month_day`)·장소(`place_id`)는 컬럼만. 장소 연결 API는 S14
+- 음력(`calendar_type`·`lunar_month_day`)은 컬럼만
+- 장소 연결(S14): 요청 `placeId`(이 그룹에 공유한 장소, 아니면 400). 수정은 값 전체라 `placeId`를 빼면 연결이 비워진다. 응답 `place: {id, name, address, category}`, 장소가 지워지면 null
 
 **공휴일** `GET /holidays?year=` (로그인만, 2000~2100) → `{items:[{date, name, substitute}]}` 날짜 순. 2026~2027만 있다 (없는 해는 빈 목록)
 
@@ -231,6 +240,38 @@
   - `done:true, announce:true`로 **새로** 완료하면 채팅방에 시스템 메시지 "○○님이 '우유 사 오기' 할 일을 완료했어요." (payload `{kind:"TODO_DONE", userId, todoId}`) → 다른 가족에게 채팅 푸시. ○○은 그룹 호칭, 없으면 닉네임 (입장·퇴장 메시지도 같다)
 - 삭제 → 204 (등록한 사람 또는 ADMIN 이상). 다른 그룹 id → 404
 
+### 장소 규칙 (S14, 앱 S15 참고)
+
+**검색** `GET /places/search?query=&x=&y=&page=&groupId=` (카카오 로컬 프록시, 키는 서버에만)
+- 한 쪽 15개, `page` 1~45 → `{items, hasMore}`. `x`(경도)·`y`(위도)는 함께 보내고, 보내면 가까운 순 + `distanceM`
+- 항목: `kakaoPlaceId, name, categoryDetail, suggestedCategory, address(도로명 우선), region1~3, lat, lng, phone, placeUrl`
+- `groupId`를 주면 그 그룹에 이미 공유된 장소에 `sharedPlaceId` (구성원이 아니면 403)
+- 사용자당 분당 30회 (429 `RATE_LIMITED` + Retry-After)
+
+**공유** `POST /groups/{groupId}/places {kakaoPlaceId, category, oneLineReview?, rating?, shareToChat?}` → 201
+- **검색 후 1시간 안에** 그 검색 결과의 `kakaoPlaceId`로 공유한다. 지나면 400 "다시 검색"
+- `category`: `RESTAURANT`(맛집)·`CAFE`·`TRAVEL`(여행지)·`LIFE`(병원·생활)·`ETC`. `rating` 1~5, `oneLineReview` 최대 100자
+- 같은 그룹에 같은 장소가 있으면 409 `PLACE_ALREADY_SHARED`
+- `shareToChat`(기본 true)이면 채팅방에 `PLACE` 메시지: `body` = 장소 이름, `payload` = `{placeId, name, category, address, region1, region2, rating}` (공유한 순간 값). 푸시 본문 "장소를 공유했어요: ○○"
+
+**목록** `GET /groups/{groupId}/places` → `{items, nextCursor}` 최신 공유 순 (기본 50, 최대 100)
+- `region1`(시·도: 서울·경기·…), `region2`(시·군·구, region1 필요), `sharedBy`·`category`(여러 개), 지도 영역 `swLat·swLng·neLat·neLng`(모두)
+- 항목에 `marks: {visited:[userId], want:[userId]}`
+- 지역별 개수 `GET .../places/regions?sharedBy=&category=` → `{total, items:[{region1, count, children:[{region2, count}]}]}` 가나다 순, 시·군·구 없음(세종)은 `region2:null`로 맨 뒤
+
+**내 주변** `GET .../places/nearby?lat=&lng=&radiusKm=`(1~20, 기본 3) → `{items:[{place, distanceM}]}` 가까운 순 최대 50
+- 좌표는 저장·로그하지 않고, 쓸 때마다 `location_access_logs`(NEARBY). 기능이 꺼져 있으면 404 → 앱은 버튼을 숨긴다
+
+**하나·수정·삭제** `/places/{id}`: 다른 그룹 장소 → 404
+- `PATCH {category?, oneLineReview?, rating?}`: 보낸 키만, `oneLineReview`·`rating`은 null이면 지운다. 공유한 사람 또는 ADMIN 이상(403)
+- `DELETE` → 204. 일정·별칭의 연결은 비워지고 표시도 지워진다. 채팅 카드는 남는다 (눌러서 404면 "삭제된 장소")
+- 다녀옴·가고 싶어요 `PUT|DELETE /places/{id}/marks/{VISITED|WANT}` → `{visited, want}` (여러 번 해도 같다)
+
+**별칭 장소** `GET|POST /groups/{groupId}/place-aliases`, `DELETE .../place-aliases/{aliasId}`
+- `POST {alias(1~30자), placeId?, addressText?(200자)}` → 201. 같은 별칭 409 `ALIAS_DUPLICATED`, 다른 그룹 장소 400
+- 응답 `{id, alias, place:{id,name,address,category}|null, addressText, createdBy, createdAt}`, 목록은 가나다 순
+- 삭제는 만든 사람 또는 ADMIN 이상, 다른 그룹 별칭 id → 404
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
@@ -239,7 +280,9 @@
 - S20: 푸시 발송 실패 재시도 (지금은 한 번 보내고 실패는 로그만). 계정 삭제(ACC-01)는 전 세션 폐기를 부르면 토큰도 함께 지워진다
 - S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
 - S16~: AI 인식 대상 메시지를 Redis Streams로 넘기기 (그룹 AI 꺼짐·개인 제외는 넣지 않음, AR-10)
-- S14: 일정 장소 연결 (`schedules.place_id` FK·API 필드)
+- S16~: 등록 후보의 장소 검색은 `PlaceSearchService`(캐시·문서 보관) 재사용, "할머니 댁"은 별칭과 매칭 (사양서 06)
+- S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
+- 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인
 - S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지
 - v1.1: 반복 일정 "이번 회차만" 수정·삭제, 음력 반복(DIF-04), 장보기 목록(TODO-02)
 - 매년: 다음 해 공휴일 마이그레이션 (2028년분은 2027년 하반기에, 우주항공청 월력요항 기준)
@@ -269,6 +312,10 @@
 | 10.2 (S12) | `schedules.reminders`(text[], 기본 `{PREV_DAY_20,HOUR_1}`) 추가, `schedule_reminder_sends`(schedule_id, occurrence_start, kind — PK) 추가, `holidays.id` + UNIQUE(date, name) |
 | 11.3 (S12) | `GET /groups/{id}/schedules/conflicts`(SCH-05), `GET /todos/{id}`, 일정 기간 조회 응답 `{items}`(회차, 페이징 없음), 할 일 수정의 `announce` |
 | 4.3 (S12) | 반복은 매주·매월·매년 + 간격·종료(날짜/횟수), 수정은 시리즈 전체 / 리마인드 선택지 5개 / 할 일 완료는 누구나 |
+| 10.2 (S14) | `places`: `lat`·`lng`·`phone`·`place_url` 추가(`geom`은 생성 컬럼), UNIQUE(group_id, kakao_place_id) / `place_marks`(place_id, user_id, kind — PK) / `place_aliases.created_by`·UNIQUE(group_id, alias) / `location_access_logs.purpose`에 `PLACE_SEARCH` / `schedules.place_id` FK |
+| 11.2 (S14) | 에러 코드 `PLACE_ALREADY_SHARED`(409), `ALIAS_DUPLICATED`(409) |
+| 11.3 (S14) | 검색 `page`·`groupId`, 목록 지도 영역(`swLat` 등)·커서, `GET /places/{id}`, `PUT·DELETE /places/{id}/marks/{kind}`(PLC-05), 별칭 삭제 `/place-aliases/{aliasId}`, 일정 요청 `placeId`·응답 `place` |
+| 8.6 (S14) | 장소 검색에 현재 위치를 보내면 `PLACE_SEARCH`로 기록 |
 
 ## 7. 오픈 이슈 (결정 필요)
 
@@ -299,3 +346,4 @@
 | 2026-11-18 | NOTI-01·SET-02 | FCM 푸시(data 메시지, HTTP v1): 기기 토큰 등록·삭제·로그아웃 시 삭제·무효 토큰 정리, 새 메시지·입장/퇴장·내보내짐·새 기기 로그인 푸시, 그룹 알림 끄기·미리보기 숨기기·방해 금지(V6) | feat(S11) |
 | 2026-11-18 | SCH-01~05·TODO-01 | 일정 등록·수정·삭제(낙관적 잠금), 반복 RRULE 펼치기, 구성원·역할 필터, 겹침 조회, 리마인드 스케줄러·푸시, 공휴일 2026~2027, 할 일·커서 목록·완료 채팅 알림(V7) | feat(S12) |
 | 2026-11-18 | TODO-01 | 시스템 메시지 이름을 그룹 호칭 우선으로 (입장·퇴장·할 일 완료) | fix(TODO-01) |
+| 2026-11-19 | PLC-01~06 | 카카오 로컬 검색 프록시(결과 캐시·요청 제한), 장소 공유·채팅 장소 카드·푸시, 지역·공유자·카테고리·지도 영역 목록, 지역별 개수, 내 주변(PostGIS, 좌표 비저장·위치 이용 기록·플래그), 다녀옴·가고 싶어요, 별칭 장소, 일정 장소 연결(V8) | feat(S14) |

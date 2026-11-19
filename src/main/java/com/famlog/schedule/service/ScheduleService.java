@@ -18,6 +18,9 @@ import com.famlog.group.domain.GroupMember;
 import com.famlog.group.domain.GroupRole;
 import com.famlog.group.repository.GroupMemberRepository;
 import com.famlog.group.service.GroupAccessChecker;
+import com.famlog.place.domain.Place;
+import com.famlog.place.dto.PlaceDtos.PlaceSummary;
+import com.famlog.place.repository.PlaceRepository;
 import com.famlog.schedule.domain.Recurrence;
 import com.famlog.schedule.domain.Reminder;
 import com.famlog.schedule.domain.Schedule;
@@ -45,22 +48,26 @@ public class ScheduleService {
     private final ScheduleRepository scheduleRepository;
     private final GroupMemberRepository memberRepository;
     private final GroupAccessChecker accessChecker;
+    private final PlaceRepository placeRepository;
 
     @Transactional
     public ScheduleResponse create(long groupId, long userId, ScheduleRequest request) {
         accessChecker.requireMember(groupId, userId);
         Schedule.Timing timing = timing(request);
+        Place place = place(groupId, request.placeId());
         Schedule schedule = new Schedule(groupId, userId, request.title().strip(), timing, recurrence(request),
                 blankToNull(request.memo()), reminders(request, timing),
-                participants(groupId, request.participantIds(), Set.of()));
-        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule));
+                participants(groupId, request.participantIds(), Set.of()), request.placeId());
+        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place));
     }
 
     @Transactional(readOnly = true)
     public ScheduleResponse get(long scheduleId, long userId) {
         Schedule schedule = find(scheduleId);
         accessChecker.requireMemberOrNotFound(schedule.getGroupId(), userId);
-        return ScheduleResponse.from(schedule);
+        Place place = schedule.getPlaceId() == null ? null
+                : placeRepository.findById(schedule.getPlaceId()).orElse(null);
+        return ScheduleResponse.from(schedule, summaryOf(place));
     }
 
     @Transactional
@@ -73,10 +80,12 @@ public class ScheduleService {
             throw new BusinessException(ErrorCode.VERSION_CONFLICT);
         }
         Schedule.Timing timing = timing(request);
+        Place place = place(schedule.getGroupId(), request.placeId());
         schedule.update(request.title().strip(), timing, recurrence(request), blankToNull(request.memo()),
                 reminders(request, timing),
-                participants(schedule.getGroupId(), request.participantIds(), schedule.getParticipantIds()));
-        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule));
+                participants(schedule.getGroupId(), request.participantIds(), schedule.getParticipantIds()),
+                request.placeId());
+        return ScheduleResponse.from(scheduleRepository.saveAndFlush(schedule), summaryOf(place));
     }
 
     @Transactional
@@ -158,6 +167,20 @@ public class ScheduleService {
             }
         }
         return new HashSet<>(requested);
+    }
+
+    /** 연결할 장소는 이 그룹에 공유한 장소 (S14 PLC) */
+    private Place place(long groupId, Long placeId) {
+        if (placeId == null) {
+            return null;
+        }
+        return placeRepository.findById(placeId)
+                .filter(place -> place.getGroupId() == groupId)
+                .orElseThrow(() -> invalid("연결할 장소는 우리 가족이 공유한 장소여야 해요."));
+    }
+
+    private static PlaceSummary summaryOf(Place place) {
+        return place == null ? null : PlaceSummary.from(place);
     }
 
     private static String blankToNull(String value) {

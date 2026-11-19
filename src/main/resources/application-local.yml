@@ -29,6 +29,9 @@ famlog:
       access-key: ${S3_ACCESS_KEY}
       secret-key: ${S3_SECRET_KEY}
       bucket: ${S3_BUCKET_MEDIA:famlog-media}
+  # 카카오 로컬(장소 검색) REST API 키. 비어 있으면 장소 검색만 실패한다
+  place:
+    kakao-rest-api-key: ${KAKAO_REST_API_KEY:}
   # FCM 서비스 계정 키 (저장소 밖 경로). 비어 있으면 푸시를 보내지 않고 로그만 남긴다
   push:
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
