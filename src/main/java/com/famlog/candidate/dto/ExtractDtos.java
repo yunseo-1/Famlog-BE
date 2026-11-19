@@ -2,11 +2,17 @@ package com.famlog.candidate.dto;
 
 import java.util.List;
 
+import com.famlog.candidate.domain.CandidateType;
 import com.famlog.group.domain.FamilyRole;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * 워커에 보내는 분석 요청 본문 (Redis Streams famlog:ai.extract 의 payload 필드, 워커 worker/app/ai/schemas.py 와 같다).
- * 사람 이름·사용자 ID 대신 임시 ID(M1, M2…)와 역할·호칭만 담고, 본문은 마스킹한 뒤 담는다 (사양서 8.7).
+ * 워커와 주고받는 AI 분석 형식 (워커 worker/app/ai/schemas.py 와 같다).
+ * <ul>
+ * <li>요청 본문: Redis Streams famlog:ai.extract 의 payload 필드. 사람 이름·사용자 ID 대신 임시 ID(M1, M2…)와 역할·호칭만 담고,
+ * 본문은 마스킹한 뒤 담는다 (사양서 8.7)</li>
+ * <li>결과의 후보: famlog:ai.extract-results 의 candidates 필드</li>
+ * </ul>
  */
 public final class ExtractDtos {
 
@@ -34,5 +40,34 @@ public final class ExtractDtos {
      * @param text   마스킹한 본문
      */
     public record ExtractMessage(long id, String sender, String sentAt, String text) {
+    }
+
+    /**
+     * 워커 결과(famlog:ai.extract-results 의 candidates 필드)의 후보 하나. 워커가 스키마를 검사했지만 여기서 한 번 더 읽는다.
+     * 값은 모두 원문 표현이다. 날짜 계산·구성원 매칭·장소 확정은 서버가 한다 (CandidateBuilder).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedCandidate(CandidateType type, ExtractedFields fields, double confidence,
+            List<ExtractedEvidence> evidence) {
+    }
+
+    /**
+     * 유형별 원문 표현 (워커 worker/app/ai/schemas.py 와 같다). 유형에 없는 값은 null.
+     * <ul>
+     * <li>SCHEDULE: title, dateText, startTimeText, endTimeText, locationText, attendeeTexts</li>
+     * <li>TODO: title, dueText, assigneeTexts</li>
+     * <li>ANNIVERSARY: title, dateText, personText</li>
+     * <li>PLACE: name, regionHint, opinion</li>
+     * </ul>
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedFields(String title, String dateText, String startTimeText, String endTimeText,
+            String locationText, List<String> attendeeTexts, String dueText, List<String> assigneeTexts,
+            String personText, String name, String regionHint, String opinion) {
+    }
+
+    /** @param spans 추출한 부분 (원문 강조용) */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedEvidence(long messageId, List<String> spans) {
     }
 }

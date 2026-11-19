@@ -15,7 +15,7 @@ import com.famlog.group.domain.FamilyRole;
  * <ul>
  * <li>호칭(family_title: 큰아들·막내)이 먼저, 그다음 역할(family_role: 아빠·엄마·아들·딸·할아버지·할머니)</li>
  * <li>같은 역할이 여러 명이면 모두 후보로 돌려 사용자가 고르게 한다</li>
- * <li>"우리·다 같이·모두" → 가족 전체(추정), "나·내가" → 보낸 사람</li>
+ * <li>"우리·다 같이·모두"와 "가자·하자"처럼 함께하자는 말 → 가족 전체(추정), "나·내가" → 보낸 사람</li>
  * <li>"엄마랑 아빠"처럼 이어 말하면 나눠서 찾고, 뒤에 붙은 조사(가·랑·한테…)는 떼고 본다</li>
  * <li>지금 구성원(members)만 찾는다. 못 찾은 표현은 그대로 남긴다 (카드에 글자로 보여 준다)</li>
  * </ul>
@@ -42,6 +42,9 @@ public final class MemberMatcher {
     private static final List<String> SELF = List.of("나", "내", "저", "제");
     private static final List<String> EVERYONE = List.of("우리", "다같이", "모두", "다들", "가족", "온가족", "전부", "다함께",
             "우리가족");
+    /** 사양서 6.2 ② "가자/우리" → 그룹 전체. 사람 표현 자리에 온 청유형 */
+    private static final List<String> LETS = List.of("가자", "하자", "먹자", "보자", "놀자", "만나자", "모이자", "가요",
+            "해요");
     private static final Map<String, FamilyRole> ROLE_WORDS = Map.ofEntries(
             Map.entry("아빠", FamilyRole.FATHER), Map.entry("아버지", FamilyRole.FATHER),
             Map.entry("아버님", FamilyRole.FATHER),
@@ -67,7 +70,7 @@ public final class MemberMatcher {
                 if (word.isEmpty()) {
                     continue;
                 }
-                if (matches(word, EVERYONE)) {
+                if (matches(word, EVERYONE) || LETS.contains(word)) {
                     everyone = true;
                     continue;
                 }

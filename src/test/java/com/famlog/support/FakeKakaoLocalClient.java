@@ -2,6 +2,7 @@ package com.famlog.support;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -16,10 +17,16 @@ public class FakeKakaoLocalClient implements KakaoLocalClient {
     private final Map<String, SearchResult> results = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> calls = new ConcurrentHashMap<>();
     private final Map<String, Boolean> locatedCalls = new ConcurrentHashMap<>();
+    private final Set<String> failing = ConcurrentHashMap.newKeySet();
 
     /** 이 검색어의 1쪽 결과 (end = 마지막 쪽인지) */
     public void register(String query, boolean end, Document... documents) {
         results.put(query, new SearchResult(List.of(documents), end));
+    }
+
+    /** 이 검색어는 카카오 장애처럼 예외를 던진다 */
+    public void fail(String query) {
+        failing.add(query);
     }
 
     public int callCount(String query) {
@@ -37,6 +44,9 @@ public class FakeKakaoLocalClient implements KakaoLocalClient {
         calls.computeIfAbsent(query, key -> new AtomicInteger()).incrementAndGet();
         if (x != null) {
             locatedCalls.put(query, true);
+        }
+        if (failing.contains(query)) {
+            throw new IllegalStateException("카카오 장애");
         }
         SearchResult result = results.get(query);
         if (result == null || page > 1) {

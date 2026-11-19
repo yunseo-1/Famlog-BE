@@ -95,6 +95,15 @@
 | 11/19 | "이번 주말"(일정) → 토요일 추정(일요일에 말하면 오늘), 기한 "이번 주에" → 일요일 추정, "~까지/안에"는 확정 | 사양서 6.2 ② + 6.3 예시 2 |
 | 11/19 | 시각만 있으면 안 지났으면 오늘, 지났으면 내일 (날짜 추정). 아침·저녁 등 단서로 정한 오전·오후는 추정 아님. 자정·밤 12시는 다음 날 00:00 | 사용자 결정, 6.3 예시 5 |
 | 11/19 | "어제·지난주"는 지난 일로 돌려 후보를 만들지 않는다(6.4). "31일"은 그 날이 있는 다음 달, 월까지 정한 없는 날("다음 달 30일" 2월)은 날짜를 비운다 | 사용자 결정 |
+| 11/19 | S18 LLM: `claude-haiku-5-5` + 프롬프트 캐싱, 월 비용 상한 $20(80%에 경고 로그), 그룹별 하루 100회. 워커에 `anthropic` SDK 추가 승인. S18-1(후보 생성, 가짜 LLM) · S18-2(실제 LLM·프롬프트·상한·평가셋)로 나눈다 | 사용자 결정. 키는 `infra/.env`의 `ANTHROPIC_API_KEY`만 |
+| 11/19 | LLM 출력은 유형별 원문 표현 필드만(`dateText`·`attendeeTexts`…). 추정 표시·필수 누락·날짜·구성원·장소는 서버가 정한다. 다른 필드가 오면 `INVALID_OUTPUT` | 사용자 결정 (S18-1 계획 1) |
+| 11/19 | 일정 장소는 별칭만 맞춰 보고 카카오 검색은 PLACE 후보에만 (호출 절약) | 사용자 결정 |
+| 11/19 | 변경 요청("11시 말고 12시로")·완료 표현("샀어")은 S18에서 후보를 만들지 않는다. 기존 항목 수정·완료 후보(`target_ref`)는 S19 승인과 함께 | 사용자 결정, AR-8 |
+| 11/19 | 지난 날짜 일정·지난 기한 할 일은 버리고, 해석 못 한 일정 날짜는 `missingFields:["date"]`로 만든다 | 사용자 결정 |
+| 11/19 | 중복: 같은 `dedupKey`의 최근 후보가 PENDING(만료 전)·APPROVED면 근거만, DISMISSED면 안 만듦, EXPIRED·UNDONE·만료된 PENDING이면 새로. 직접 등록한 항목과는 비교하지 않는다 | 사용자 결정 |
+| 11/19 | 만료 `expires_at`은 만들 때 정한다(일정 시각, 종일은 다음 날 0시, 나머지 7일). 만료 배치 없이 조회에서 거른다(S19) | 사용자 결정 |
+| 11/19 | 결과가 왔을 때 그룹 AI가 꺼져 있으면 후보를 저장하지 않는다 (`ai_jobs` DONE, `candidate_count` 0). `candidate_count`는 새로 만든 후보 수 | 사용자 결정 |
+| 11/19 | 사람 표현 자리의 청유형("가자·하자·먹자…")은 가족 전체(추정) | 사양서 6.2 ② "가자/우리", 6.3 예시 1 |
 
 ## 3. Figma 상태
 
@@ -152,8 +161,9 @@
 | S12 | SCH-01~05 일정·반복·리마인드·공휴일·겹침, TODO-01 할 일 | ✅ PR #13 |
 | S14 | PLC-01~06 장소 공유·지역/구성원 목록·내 주변·다녀옴·별칭, 일정 장소 연결 | ✅ PR #15 |
 | S16 | ARC-01 인식 파이프라인 골격: 규칙 필터·30초 멈춤·보조 분석, 마스킹·가명, 워커 소비·DLQ·가짜 LLM, 그룹 AI 설정·개인 제외 | ✅ PR #18 |
-| S17 | ARC-02·04 날짜·시각·구성원 정규화 (단위 테스트 89개, AR-9) | ✅ 이번 PR |
-| S18~S19 | ⭐ LLM 추출·후보 생성·평가셋, 후보 API | 다음 (S18) |
+| S17 | ARC-02·04 날짜·시각·구성원 정규화 (단위 테스트 89개, AR-9) | ✅ PR #19 |
+| S18-1 | ARC-02~04·07 후보 생성: 검증·정규화·장소 상위 3개·중복 제거·신뢰도 (가짜 LLM) | ✅ 이번 PR |
+| S18-2~S19 | ⭐ 실제 LLM·프롬프트·비용 상한·평가셋, 후보 API | 다음 (S18-2) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
 모바일 S6·S7은 `Famlog-moblie`에서 완료(2026-11-17).
@@ -310,7 +320,7 @@
 - 요청: 구간 메시지(최대 50) + 앞 맥락 최대 20 + 구성원 `{ref:"M1", familyRole, familyTitle}` + 발송 시각(+09:00), 본문은 전화·계좌·카드·주민번호·이메일 마스킹
 - `ai_jobs`에 요청 기록(구간, 임시 ID 대응, 상태, 모델·프롬프트 버전, 토큰, 지연). 원문 컬럼 없음
 - 워커: 소비 그룹 `ai-workers`, 재시도 3회 후 DLQ(`famlog:ai.extract:dlq`), LLM 출력은 pydantic 스키마 + 근거 메시지가 구간 안인지 검증, 실패는 `INVALID_OUTPUT`
-- 결과(`famlog:ai.extract-results`) → `ai_jobs` DONE/FAILED. 후보 저장은 S18
+- 결과(`famlog:ai.extract-results`) → `ai_jobs` DONE/FAILED, 후보는 아래 "후보 생성 규칙"
 
 ### 정규화 규칙 (S17, 서버 내부 · S18에서 후보 생성에 연결)
 
@@ -318,8 +328,33 @@
 - `DateNormalizer.scheduleDate / deadline`: 오늘·내일·모레·글피, N일/N주 뒤, 요일(이번·다음·다다음 주), N일, 이번·다음 달 N일, M월 D일·M/D, 주말, 기한(이번 주에·주말까지·이번 달 안에·다음 주까지) → 날짜 + 추정 여부 / 지난 일 / 해석 못 함
 - `TimeNormalizer`: 숫자·한글 숫자 시각, 반·분, 오전·오후·아침·저녁·밤·새벽·점심 단서(시간 표현 → 같은 메시지 순), 단서 없으면 1~6시 오후·7~11시 오전·12시 낮(추정)
 - `DateTimeNormalizer.schedule / anniversary`: 날짜 + 시각 → 날짜·시작 시각(null = 종일)·추정 키(`date`, `startTime.ampm`), 기념일은 월·일
-- `MemberMatcher`: 호칭 → 역할(같은 역할 여러 명이면 후보 묶음) → "나"(보낸 사람), "우리·다 같이·모두"(가족 전체 추정), 조사 제거, 못 찾은 표현은 그대로
+- `MemberMatcher`: 호칭 → 역할(같은 역할 여러 명이면 후보 묶음) → "나"(보낸 사람), "우리·다 같이·모두·가자"(가족 전체 추정), 조사 제거, 못 찾은 표현은 그대로
 - 지원 안 함(날짜 비움): "열흘 뒤", 한글 숫자 날짜("십오일"), "월말쯤", "다음 주말까지"(이번 주 일요일로 계산됨)
+
+### 후보 생성 규칙 (S18, 앱 S19 참고)
+
+워커 결과의 후보를 서버가 검증·정규화해 `registration_candidates`(PENDING)에만 저장한다. 실제 일정·할 일·장소는 만들지 않는다. 조회·승인 API와 WebSocket 이벤트는 S19.
+
+**LLM 출력** (워커 `schemas.py`, 원문 표현만. 다른 필드는 `INVALID_OUTPUT`)
+`{type, fields, confidence, evidence:[{messageId, spans}]}`
+- SCHEDULE `{title, dateText, startTimeText, endTimeText, locationText, attendeeTexts[]}` · TODO `{title, dueText, assigneeTexts[]}` · ANNIVERSARY `{title, dateText, personText}` · PLACE `{name, regionHint, opinion}`
+
+**저장되는 `fields`** (S19 응답의 바탕)
+- SCHEDULE `{title, date, startTime, endTime, allDay, location:{text, aliasId, placeId}|null, attendeeIds, attendeeChoices, unmatchedAttendees}`
+- TODO `{title, dueDate, assigneeIds, assigneeChoices, unmatchedAssignees}`
+- ANNIVERSARY `{title, month, day, personText}` (음력·미리 알림은 승인 폼에서)
+- PLACE `{name, regionHint, kakaoPlaceId, options:[{kakaoPlaceId, name, category, categoryDetail, address, region1~3, lat, lng, phone, placeUrl}] (≤3), opinion, recommendedBy}`
+- 날짜 `yyyy-MM-dd`, 시각 `HH:mm`(Asia/Seoul). 가족 전체는 `attendeeIds:["ALL"]`(추정). `*Choices`는 같은 역할이 여러 명이라 고를 묶음, `unmatched*`는 못 찾은 사람 표현(글자로 보여 준다)
+- `inferred_fields`: `date`, `startTime.ampm`, `attendeeIds`, `assigneeIds`, `dueDate`. `missing_fields`: `title`, `date`, `name`(채워야 등록)
+
+**처리**
+- 기준: 날짜 표현이 들어 있는 근거 메시지(없으면 첫 근거)의 발송 시각·보낸 사람·본문(오전·오후 단서)
+- 근거가 이 요청의 분석 구간(같은 방, `(from_seq, to_seq]`)이 아니거나 지운 메시지면 그 후보를 버린다
+- 신뢰도 0.5 미만 버림. 0.75 이상 채팅방 카드, 0.5~0.75 제안함 — 구간은 저장하지 않고 `confidence`로 S19가 나눈다
+- 지난 일정·지난 기한·지난 일 표현의 기념일은 버린다. 날짜를 해석 못 한 일정은 `missing_fields`에 `date`
+- 장소: PLACE는 `regionHint + name`으로 카카오 검색 상위 3개, 1개면 `kakaoPlaceId` 자동 선택, 실패·0개면 이름만. 일정 장소는 별칭(띄어쓰기 무시 일치)만
+- `dedupKey`: `유형|정규화 제목|날짜`(기념일 `MM-DD`, 장소 `PLACE|kakao:ID` 또는 `PLACE|name:이름`). 같은 그룹 저장은 advisory lock으로 하나씩
+- 만료 `expires_at`: 일정 시각(종일은 다음 날 0시), 나머지·날짜 없는 일정은 7일 뒤
 
 ### 다음 단계로 넘긴 것
 
@@ -328,9 +363,9 @@
 - 출시 전: 위치기반서비스 신고 확인 후 `photo-location-enabled` 켜기, "사진 위치 사용" 동의 API(설정 화면)
 - S20: 푸시 발송 실패 재시도 (지금은 한 번 보내고 실패는 로그만). 계정 삭제(ACC-01)는 전 세션 폐기를 부르면 토큰도 함께 지워진다
 - S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
-- S18: LLM 제공자·모델 선택(데이터 학습 미사용·무보관 조건), `prompts/extract_v1.md`, 그룹별 하루 호출 상한·월 비용 상한, 후보 저장(`registration_candidates`·`candidate_evidence`)
+- S18-2: 실제 LLM(`claude-haiku-5-5`, 프롬프트 캐싱) 연결, `prompts/extract_v1.md`, 그룹별 하루 100회·월 $20 상한(80% 경고 로그), `evals/` 50건. compose·`.env.example`에 `ANTHROPIC_API_KEY`(빈 값). 처리방침용 데이터 처리 조건 확인은 사용자(S22 전)
+- S19: 후보 조회·승인·무시·되돌리기 API, `candidate.*` 이벤트, `item_sources`·`suggestion_feedback`, 기존 항목 수정·완료 후보(`target_ref`), 만료 후보 거르기
 - S20: AI 분석 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS`/`OVERSEAS_TRANSFER` 동의, 관리자가 구성원의 분석 제외 여부를 보는 화면(8.8), 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리
-- S16~: 등록 후보의 장소 검색은 `PlaceSearchService`(캐시·문서 보관) 재사용, "할머니 댁"은 별칭과 매칭 (사양서 06)
 - S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인
 - S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지

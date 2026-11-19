@@ -58,8 +58,8 @@ class MemberMatcherTest {
     }
 
     @Test
-    void 우리_다_같이_모두는_가족_전체_추정() {
-        for (String text : List.of("우리", "다 같이", "모두")) {
+    void 우리_다_같이_모두_가자는_가족_전체_추정() {
+        for (String text : List.of("우리", "다 같이", "모두", "가자", "먹자")) {
             MatchResult result = match(MOM, text);
             assertThat(result.everyone()).as(text).isTrue();
             assertThat(result.unmatched()).as(text).isEmpty();
