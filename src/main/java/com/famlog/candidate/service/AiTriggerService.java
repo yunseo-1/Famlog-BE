@@ -8,6 +8,8 @@ import java.util.Set;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.famlog.common.flag.FeatureFlag;
+import com.famlog.common.flag.FeatureFlags;
 import com.famlog.candidate.domain.AiTrigger;
 import com.famlog.chat.domain.Message;
 import com.famlog.chat.domain.MessageType;
@@ -47,6 +49,7 @@ public class AiTriggerService {
     private final GroupSettingsService settingsService;
     private final ExtractJobService jobService;
     private final AiProperties properties;
+    private final FeatureFlags featureFlags;
     private final Clock clock;
 
     static String roomKey(long roomId) {
@@ -55,7 +58,7 @@ public class AiTriggerService {
 
     /** 메시지가 저장된 뒤 (커밋 후) */
     public void onMessagePosted(long groupId, long messageId) {
-        if (!properties.enabled()) {
+        if (!featureFlags.enabled(FeatureFlag.AI_ANALYSIS, properties.enabled())) {
             return;
         }
         Message message = messageRepository.findById(messageId).orElse(null);

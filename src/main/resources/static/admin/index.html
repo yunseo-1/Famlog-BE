@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>팸로그 관리자</title>
+<!--
+  최소 관리자 도구 (사양서 14장). 모든 요청에 X-Admin-Token. 토큰은 이 탭의 sessionStorage 에만 둔다.
+  신고된 콘텐츠는 상세를 열 때만 서버에서 받고(감사 로그), 화면에는 textContent 로만 넣는다 (HTML 해석 안 함).
+-->
+<style>
+  :root { --bg: #fafafa; --fg: #222; --muted: #666; --line: #ddd; --accent: #2f6fde; --warn: #c0392b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; }
+  nav button { margin-right: 4px; }
+  main { padding: 16px; max-width: 1100px; }
+  button { cursor: pointer; padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 4px; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  input, select, textarea { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr.child td { color: var(--warn); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .panel { border: 1px solid var(--line); background: #fff; padding: 12px; margin-top: 12px; border-radius: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 8px; }
+  #msg { margin-left: auto; color: var(--warn); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>팸로그 관리자</h1>
+  <nav id="tabs" hidden>
+    <button data-tab="reports">신고</button>
+    <button data-tab="holidays">공휴일</button>
+    <button data-tab="versions">앱 버전</button>
+    <button data-tab="flags">기능 플래그</button>
+    <button data-tab="audit">감사 로그</button>
+  </nav>
+  <span id="msg"></span>
+</header>
+<main>
+  <section id="login" class="panel">
+    <div class="row">
+      <label>관리자 토큰 <input id="token" type="password" size="40" autocomplete="off"></label>
+      <button id="enter">들어가기</button>
+    </div>
+    <p class="muted">토큰은 서버 환경변수 FAMLOG_ADMIN_TOKEN 값이에요. 이 탭을 닫으면 지워져요.</p>
+  </section>
+
+  <section id="reports" hidden>
+    <div class="row">
+      상태 <select id="reportStatus">
+        <option value="OPEN">처리 전</option><option value="">전체</option>
+        <option value="REVIEWED">확인</option><option value="ACTIONED">조치</option><option value="REJECTED">문제 없음</option>
+      </select>
+      <button id="reportReload">새로고침</button>
+    </div>
+    <table><thead><tr><th>id</th><th>대상</th><th>사유</th><th>상태</th><th>그룹</th><th>접수</th><th></th></tr></thead>
+      <tbody id="reportRows"></tbody></table>
+    <button id="reportMore" hidden>더 보기</button>
+    <div id="reportDetail" class="panel" hidden>
+      <div class="row"><strong id="rdTitle"></strong></div>
+      <div class="row muted" id="rdMeta"></div>
+      <div>신고 내용: <span id="rdDetail"></span></div>
+      <div>신고된 콘텐츠:</div><pre id="rdContent"></pre>
+      <div id="rdMedia"></div>
+      <div class="row">
+        <select id="rdStatus"><option value="ACTIONED">조치</option><option value="REVIEWED">확인</option>
+          <option value="REJECTED">문제 없음</option></select>
+        <select id="rdAction"><option value="">조치 없음</option><option value="HIDE_MESSAGE">메시지·사진 숨기기</option>
+          <option value="DISMISS_CANDIDATE">AI 후보 무시</option></select>
+        <input id="rdNote" placeholder="메모 (본문을 옮겨 적지 않기)" size="40" maxlength="500">
+        <button id="rdResolve">처리</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="holidays" hidden>
+    <div class="row">연도 <input id="hYear" type="number" min="2000" max="2100"> <button id="hReload">보기</button></div>
+    <div class="row">
+      <input id="hDate" type="date"> <input id="hName" placeholder="이름" maxlength="30">
+      <label><input id="hSub" type="checkbox"> 대체공휴일</label> <button id="hAdd">추가</button>
+    </div>
+    <table><thead><tr><th>날짜</th><th>이름</th><th>대체</th><th></th></tr></thead><tbody id="hRows"></tbody></table>
+  </section>
+
+  <section id="versions" hidden>
+    <table><thead><tr><th>플랫폼</th><th>최소 지원</th><th>최신</th><th>공지</th><th></th></tr></thead>
+      <tbody id="vRows"></tbody></table>
+    <p class="muted">최소 지원 버전보다 낮은 앱은 426(업데이트 필요)을 받아요.</p>
+  </section>
+
+  <section id="flags" hidden>
+    <table><thead><tr><th>키</th><th>상태</th><th>출처</th><th></th></tr></thead><tbody id="fRows"></tbody></table>
+    <p class="muted">DEFAULT 는 서버 설정값을 따르는 상태예요. 위치 기능은 위치기반서비스 신고 확인 전까지 꺼 두세요.</p>
+  </section>
+
+  <section id="audit" hidden>
+    <button id="aReload">새로고침</button>
+    <table><thead><tr><th>시각</th><th>동작</th><th>대상</th><th>그룹</th><th>meta</th><th>ip</th></tr></thead>
+      <tbody id="aRows"></tbody></table>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const TOKEN_KEY = 'famlogAdminToken';
+  let token = null;
+  try { token = sessionStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+  let reportCursor = null;
+  let currentReport = null;
+
+  function say(text) { $('msg').textContent = text || ''; }
+
+  async function api(method, path, body) {
+    const res = await fetch('/admin/api' + path, {
+      method,
+      headers: Object.assign({ 'X-Admin-Token': token }, body ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) { logout(); throw new Error('토큰이 맞지 않아요'); }
+    if (res.status === 204) return null;
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.message) || ('오류 ' + res.status));
+    return data;
+  }
+
+  function cell(tr, text) { const td = document.createElement('td'); td.textContent = text == null ? '' : String(text); tr.appendChild(td); return td; }
+  function button(td, label, onClick) { const b = document.createElement('button'); b.textContent = label; b.onclick = onClick; td.appendChild(b); return b; }
+  function when(iso) { return iso ? new Date(iso).toLocaleString('ko-KR') : ''; }
+
+  function show(tab) {
+    for (const s of ['reports', 'holidays', 'versions', 'flags', 'audit']) $(s).hidden = s !== tab;
+    for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+    ({ reports: () => loadReports(true), holidays: loadHolidays, versions: loadVersions, flags: loadFlags, audit: loadAudit })[tab]()
+      .catch((e) => say(e.message));
+  }
+
+  function enter() {
+    $('login').hidden = true; $('tabs').hidden = false; show('reports');
+  }
+  function logout() {
+    token = null; try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    $('login').hidden = false; $('tabs').hidden = true;
+    for (const s of ['reports', 'holidays', 'versions', 'flags', 'audit']) $(s).hidden = true;
+  }
+
+  // --- 신고 ---
+  async function loadReports(reset) {
+    if (reset) { reportCursor = null; $('reportRows').replaceChildren(); $('reportDetail').hidden = true; }
+    const status = $('reportStatus').value;
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (reportCursor) q.set('cursor', reportCursor);
+    const page = await api('GET', '/reports?' + q);
+    for (const r of page.items) {
+      const tr = document.createElement('tr');
+      if (r.reason === 'CHILD_SAFETY') tr.className = 'child';
+      cell(tr, r.id); cell(tr, r.targetType + ' #' + r.targetId); cell(tr, r.reason);
+      cell(tr, r.status + (r.action ? ' / ' + r.action : '')); cell(tr, r.groupId); cell(tr, when(r.createdAt));
+      button(cell(tr, ''), '열기', () => openReport(r.id).catch((e) => say(e.message)));
+      $('reportRows').appendChild(tr);
+    }
+    reportCursor = page.nextCursor;
+    $('reportMore').hidden = !reportCursor;
+    say('');
+  }
+
+  async function openReport(id) {
+    const d = await api('GET', '/reports/' + id);
+    currentReport = d.report;
+    $('reportDetail').hidden = false;
+    $('rdTitle').textContent = '신고 #' + d.report.id + ' · ' + d.report.targetType + ' #' + d.report.targetId + ' · ' + d.report.reason;
+    $('rdMeta').textContent = '신고한 사람 ' + d.reporterId + ' · 그룹 ' + d.report.groupId + ' · ' + d.report.status
+      + (d.handlerNote ? ' · 메모: ' + d.handlerNote : '');
+    $('rdDetail').textContent = d.detail || '(없음)';
+    const content = d.content ? Object.assign({}, d.content) : null;
+    const media = [];
+    if (content && content.url) { media.push(content); delete content.url; }
+    if (content && Array.isArray(content.media)) { media.push(...content.media); content.media = content.media.map((m) => m.mediaId); }
+    $('rdContent').textContent = content ? JSON.stringify(content, null, 2) : '(지워졌거나 없음)';
+    $('rdMedia').replaceChildren();
+    for (const m of media) {
+      const a = document.createElement('a');
+      a.href = m.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = (m.type || 'MEDIA') + ' #' + m.mediaId + ' 열기 (10분 링크)';
+      $('rdMedia').appendChild(a); $('rdMedia').appendChild(document.createElement('br'));
+    }
+    $('rdAction').value = d.report.targetType === 'AI_OUTPUT' ? 'DISMISS_CANDIDATE'
+      : (d.report.targetType === 'USER' ? '' : 'HIDE_MESSAGE');
+    $('rdNote').value = '';
+    say('열람을 감사 로그에 남겼어요');
+  }
+
+  async function resolveReport() {
+    const status = $('rdStatus').value;
+    const action = status === 'ACTIONED' ? ($('rdAction').value || null) : null;
+    const res = await api('POST', '/reports/' + currentReport.id + '/resolve', { status, action, note: $('rdNote').value });
+    say('처리했어요 (' + res.resolvedCount + '건)');
+    await loadReports(true);
+  }
+
+  // --- 공휴일 ---
+  async function loadHolidays() {
+    if (!$('hYear').value) $('hYear').value = new Date().getFullYear();
+    const items = await api('GET', '/holidays?year=' + encodeURIComponent($('hYear').value));
+    $('hRows').replaceChildren();
+    for (const h of items) {
+      const tr = document.createElement('tr');
+      cell(tr, h.date); cell(tr, h.name); cell(tr, h.substitute ? '대체' : '');
+      button(cell(tr, ''), '삭제', async () => {
+        if (!confirm(h.date + ' ' + h.name + ' 을(를) 지울까요?')) return;
+        await api('DELETE', '/holidays/' + h.id).catch((e) => say(e.message)); loadHolidays();
+      });
+      $('hRows').appendChild(tr);
+    }
+  }
+  async function addHoliday() {
+    await api('POST', '/holidays', { date: $('hDate').value, name: $('hName').value, substitute: $('hSub').checked });
+    $('hName').value = ''; await loadHolidays(); say('추가했어요');
+  }
+
+  // --- 앱 버전 ---
+  async function loadVersions() {
+    const items = await api('GET', '/app-versions');
+    $('vRows').replaceChildren();
+    for (const v of items) {
+      const tr = document.createElement('tr');
+      cell(tr, v.platform);
+      const inputs = ['minSupportedVersion', 'latestVersion', 'notice'].map((k) => {
+        const i = document.createElement('input'); i.value = v[k] || ''; i.size = k === 'notice' ? 40 : 10;
+        cell(tr, '').appendChild(i); return i;
+      });
+      button(cell(tr, ''), '저장', async () => {
+        await api('PUT', '/app-versions/' + v.platform, {
+          minSupportedVersion: inputs[0].value, latestVersion: inputs[1].value || null, notice: inputs[2].value || null,
+        }).then(() => say('저장했어요')).catch((e) => say(e.message));
+        loadVersions();
+      });
+      $('vRows').appendChild(tr);
+    }
+  }
+
+  // --- 기능 플래그 ---
+  async function loadFlags() {
+    const items = await api('GET', '/feature-flags');
+    $('fRows').replaceChildren();
+    for (const f of items) {
+      const tr = document.createElement('tr');
+      cell(tr, f.key); cell(tr, f.enabled ? '켜짐' : '꺼짐'); cell(tr, f.source);
+      button(cell(tr, ''), f.enabled ? '끄기' : '켜기', async () => {
+        await api('PUT', '/feature-flags/' + encodeURIComponent(f.key), { enabled: !f.enabled })
+          .then(() => say('바꿨어요')).catch((e) => say(e.message));
+        loadFlags();
+      });
+      $('fRows').appendChild(tr);
+    }
+  }
+
+  // --- 감사 로그 ---
+  async function loadAudit() {
+    const items = await api('GET', '/audit-logs?limit=100');
+    $('aRows').replaceChildren();
+    for (const a of items) {
+      const tr = document.createElement('tr');
+      cell(tr, when(a.createdAt)); cell(tr, a.action); cell(tr, (a.targetType || '') + (a.targetId ? ' #' + a.targetId : ''));
+      cell(tr, a.groupId); cell(tr, a.meta); cell(tr, a.ip);
+      $('aRows').appendChild(tr);
+    }
+  }
+
+  $('enter').onclick = () => {
+    token = $('token').value.trim();
+    if (!token) return;
+    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    $('token').value = '';
+    enter();
+  };
+  for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => show(b.dataset.tab);
+  $('reportReload').onclick = () => loadReports(true).catch((e) => say(e.message));
+  $('reportStatus').onchange = () => loadReports(true).catch((e) => say(e.message));
+  $('reportMore').onclick = () => loadReports(false).catch((e) => say(e.message));
+  $('rdResolve').onclick = () => resolveReport().catch((e) => say(e.message));
+  $('hReload').onclick = () => loadHolidays().catch((e) => say(e.message));
+  $('hAdd').onclick = () => addHoliday().catch((e) => say(e.message));
+  $('aReload').onclick = () => loadAudit().catch((e) => say(e.message));
+  if (token) enter();
+})();
+</script>
+</body>
+</html>

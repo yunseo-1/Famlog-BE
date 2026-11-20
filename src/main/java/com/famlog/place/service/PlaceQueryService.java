@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.flag.FeatureFlag;
+import com.famlog.common.flag.FeatureFlags;
 import com.famlog.common.source.ItemSources;
 import com.famlog.common.source.SourceRef;
 import com.famlog.group.service.GroupAccessChecker;
@@ -68,6 +70,7 @@ public class PlaceQueryService {
     private final ItemSources itemSources;
     private final ConsentRepository consentRepository;
     private final PlaceProperties properties;
+    private final FeatureFlags featureFlags;
     private final Clock clock;
 
     /** 검색 조건. bounds 는 지도 화면 영역 (없으면 null) */
@@ -137,7 +140,7 @@ public class PlaceQueryService {
 
     @Transactional
     public NearbyListResponse nearby(long groupId, long userId, double lat, double lng, double radiusKm) {
-        if (!properties.nearbyEnabled()) {
+        if (!featureFlags.enabled(FeatureFlag.PLACE_NEARBY, properties.nearbyEnabled())) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         accessChecker.requireMember(groupId, userId);

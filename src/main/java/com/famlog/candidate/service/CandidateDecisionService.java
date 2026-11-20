@@ -162,6 +162,18 @@ public class CandidateDecisionService {
         return response(candidate);
     }
 
+    /** 관리자 조치 (MOD-01): 신고된 후보가 대기 중이면 무시로 바꾸고 candidate.resolved 를 보낸다. 이미 처리됐으면 그대로 */
+    @Transactional
+    public void dismissByAdmin(long candidateId) {
+        RegistrationCandidate candidate = lock(candidateId);
+        if (candidate.getStatus() != CandidateStatus.PENDING) {
+            return;
+        }
+        candidate.dismissByAdmin(Instant.now(clock));
+        candidateRepository.saveAndFlush(candidate);
+        resolved(candidate);
+    }
+
     @Transactional
     public DecisionResponse undo(long candidateId, long userId) {
         RegistrationCandidate candidate = lock(candidateId);
