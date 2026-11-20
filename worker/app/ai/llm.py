@@ -1,7 +1,7 @@
 """LLM 제공자 경계 (사양서 7.2 "교체 가능": LlmClient 인터페이스 뒤에 제공자를 숨긴다).
 
 - fake: 후보 없음으로 답한다 (테스트·CI, 외부 호출 없음)
-- anthropic: Claude API. 지시문은 버전 파일(prompts/extract_v1.md)이고, 바뀌지 않는 시스템 지시문에 캐시 표시를 단다.
+- anthropic: Claude API. 지시문은 버전 파일(prompts/extract_v2.md)이고, 바뀌지 않는 시스템 지시문에 캐시 표시를 단다.
   대화는 사용자 메시지의 데이터 블록(<members>·<context>·<messages>)에만 넣는다 (사양서 9.7)
 
 프롬프트·응답 원문은 로그·저장 금지 (사양서 8.7). 모델·프롬프트 버전과 토큰 수만 돌려준다.
@@ -15,7 +15,7 @@ from typing import Protocol
 from ..config import Settings
 from .schemas import ExtractPayload
 
-PROMPT_VERSION = "extract_v1"
+PROMPT_VERSION = "extract_v2"
 PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / f"{PROMPT_VERSION}.md"
 
 
@@ -59,19 +59,27 @@ _FIELDS = {
     "TODO": {**_text_props("title", "dueText"), **_list_props("assigneeTexts")},
     "ANNIVERSARY": _text_props("title", "dateText", "personText"),
     "PLACE": _text_props("name", "regionHint", "opinion"),
+    "SCHEDULE_CHANGE": _text_props("title", "fromDateText", "fromTimeText", "dateText", "startTimeText"),
+    "TODO_DONE": _text_props("title"),
 }
 
-# 구조화 출력용 JSON 스키마. 길이·개수 제한은 schemas.LlmOutput(pydantic)이 검사한다
+# 구조화 출력용 JSON 스키마. 유형별 anyOf 는 6개가 되자 API 한도를 넘어서(문법 크기·선택 필드·union 개수),
+# fields 는 모든 유형의 필드를 가진 객체 하나로 두고 모두 필수(글자는 null 허용)로 한다.
+# 다른 유형의 필드는 null·빈 목록으로 오고, pipeline 이 지운 뒤 schemas.LlmOutput(pydantic)이 유형별 필드·길이·개수를 검사한다
+_ALL_FIELDS = {name: ({"type": ["string", "null"]} if prop["type"] == "string" else prop)
+               for props in _FIELDS.values() for name, prop in props.items()}
+
 OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "candidates": {
             "type": "array",
-            "items": {"anyOf": [{
+            "items": {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "enum": [kind]},
-                    "fields": {"type": "object", "properties": props, "additionalProperties": False},
+                    "type": {"type": "string", "enum": list(_FIELDS)},
+                    "fields": {"type": "object", "properties": _ALL_FIELDS, "required": list(_ALL_FIELDS),
+                               "additionalProperties": False},
                     "confidence": {"type": "number"},
                     "evidence": {"type": "array", "items": {
                         "type": "object",
@@ -83,7 +91,7 @@ OUTPUT_SCHEMA = {
                 },
                 "required": ["type", "fields", "confidence", "evidence"],
                 "additionalProperties": False,
-            } for kind, props in _FIELDS.items()]},
+            },
         },
     },
     "required": ["candidates"],

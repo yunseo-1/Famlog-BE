@@ -86,6 +86,22 @@ class PlaceFields(_Model):
     opinion: Annotated[str, Field(max_length=200)] | None = None
 
 
+class ScheduleChangeFields(_Model):
+    """이미 정한 일정을 바꾸자는 말 (S19-2). 대상 일정은 서버가 그룹 일정에서 찾는다"""
+
+    title: _Text | None = None  # 어떤 일정인지 핵심어
+    from_date_text: _Text | None = Field(alias="fromDateText", default=None)
+    from_time_text: _Text | None = Field(alias="fromTimeText", default=None)
+    date_text: _Text | None = Field(alias="dateText", default=None)
+    start_time_text: _Text | None = Field(alias="startTimeText", default=None)
+
+
+class TodoDoneFields(_Model):
+    """할 일을 끝냈다는 말 (S19-2). 대상 할 일은 서버가 찾는다"""
+
+    title: _Text | None = None  # 끝낸 일의 핵심어
+
+
 class _Candidate(_Model):
     """LLM 이 뽑은 원문 표현 (사양서 6.3). 날짜 계산·구성원 매칭·장소 확정·추정 표시는 API 가 한다 (S17·S18)"""
 
@@ -113,8 +129,18 @@ class PlaceCandidate(_Candidate):
     fields: PlaceFields
 
 
-Candidate = Annotated[ScheduleCandidate | TodoCandidate | AnniversaryCandidate | PlaceCandidate,
-                      Field(discriminator="type")]
+class ScheduleChangeCandidate(_Candidate):
+    type: Literal["SCHEDULE_CHANGE"]
+    fields: ScheduleChangeFields
+
+
+class TodoDoneCandidate(_Candidate):
+    type: Literal["TODO_DONE"]
+    fields: TodoDoneFields
+
+
+Candidate = Annotated[ScheduleCandidate | TodoCandidate | AnniversaryCandidate | PlaceCandidate
+                      | ScheduleChangeCandidate | TodoDoneCandidate, Field(discriminator="type")]
 
 
 class LlmOutput(_Model):

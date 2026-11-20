@@ -33,6 +33,7 @@ import com.famlog.support.Family;
 import com.famlog.support.FakeKakaoLocalClient;
 import com.famlog.support.GroupApi;
 import com.famlog.support.PlaceApi;
+import com.famlog.support.ScheduleApi;
 import com.famlog.support.StompTestClient;
 import com.jayway.jsonpath.JsonPath;
 
@@ -355,6 +356,158 @@ class CandidateApiTest extends ChatIntegrationTest {
                 .andExpect(jsonPath("$.evidence[0].spans[0]").value("선물 사 와"));
     }
 
+    // ---- 기존 항목 변경·완료 (S19-2) ----
+
+    @Test
+    void 일정_변경_후보는_기존_일정을_가리키고_승인하면_시각만_바꾸고_되돌리면_돌아온다() throws Exception {
+        long scheduleId = ScheduleApi.create(mockMvc, family.groupId(), family.dad(),
+                ScheduleApi.timed("영화 보기", tomorrow + "T11:00", tomorrow + "T13:00", family.dad(), family.son()));
+        long id = change(family.mom(), "11시 말고 12시로 하자", "영화", "11시", "12시");
+
+        mockMvc.perform(get("/api/v1/candidates/{id}", id).with(asUser(family.son())))
+                .andExpect(jsonPath("$.candidate.type").value("SCHEDULE"))
+                .andExpect(jsonPath("$.candidate.missingFields.length()").value(0))
+                .andExpect(jsonPath("$.candidate.fields.title").value("영화 보기"))
+                .andExpect(jsonPath("$.candidate.fields.date").value(tomorrow.toString()))
+                .andExpect(jsonPath("$.candidate.fields.startTime").value("12:00"))
+                .andExpect(jsonPath("$.candidate.fields.endTime").value("14:00"))
+                .andExpect(jsonPath("$.candidate.target.entityType").value("SCHEDULE"))
+                .andExpect(jsonPath("$.candidate.target.action").value("CHANGE"))
+                .andExpect(jsonPath("$.candidate.target.entityId").value(scheduleId))
+                .andExpect(jsonPath("$.candidate.target.createdBy").value(family.dad()))
+                .andExpect(jsonPath("$.candidate.target.choices[0].createdBy").value(family.dad()))
+                .andExpect(jsonPath("$.candidate.target.before.startTime").value("11:00"))
+                .andExpect(jsonPath("$.candidate.target.after.startTime").value("12:00"))
+                .andExpect(jsonPath("$.candidate.target.choices.length()").value(1))
+                .andExpect(jsonPath("$.candidate.target.applied").doesNotExist());
+
+        approve(family.dad(), id, "{\"version\":0}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidate.status").value("APPROVED"))
+                .andExpect(jsonPath("$.candidate.entityType").value("SCHEDULE"))
+                .andExpect(jsonPath("$.candidate.entityId").value(scheduleId));
+        mockMvc.perform(get("/api/v1/schedules/{id}", scheduleId).with(asUser(family.son())))
+                .andExpect(jsonPath("$.startsAt").value(tomorrow + "T12:00:00+09:00"))
+                .andExpect(jsonPath("$.endsAt").value(tomorrow + "T14:00:00+09:00"))
+                .andExpect(jsonPath("$.title").value("영화 보기"))
+                .andExpect(jsonPath("$.participantIds.length()").value(2))
+                .andExpect(jsonPath("$.source").doesNotExist());
+        assertThat(count("schedules WHERE group_id = " + family.groupId())).isEqualTo(1);
+        assertThat(lastSystemMessage()).endsWith("님이 '영화 보기' 일정을 12:00으로 바꿨어요.");
+        assertThat(feedback(id)).containsExactly("APPROVED:{}");
+
+        undo(family.dad(), id).andExpect(status().isOk()).andExpect(jsonPath("$.candidate.status").value("UNDONE"));
+        mockMvc.perform(get("/api/v1/schedules/{id}", scheduleId).with(asUser(family.son())))
+                .andExpect(jsonPath("$.startsAt").value(tomorrow + "T11:00:00+09:00"))
+                .andExpect(jsonPath("$.endsAt").value(tomorrow + "T13:00:00+09:00"));
+        assertThat(count("messages WHERE room_id = " + roomId + " AND type = 'SYSTEM' AND deleted_at IS NULL "
+                + "AND payload->>'kind' = 'CANDIDATE_APPROVED'")).isZero();
+    }
+
+    @Test
+    void 남이_등록한_일정은_수정_권한이_없으면_변경_승인이_403이고_후보는_그대로다() throws Exception {
+        long scheduleId = ScheduleApi.create(mockMvc, family.groupId(), family.dad(),
+                ScheduleApi.timed("영화 보기", tomorrow + "T11:00", tomorrow + "T13:00", family.dad()));
+        long id = change(family.son(), "영화 11시 말고 12시로 하자", "영화", "11시", "12시");
+
+        approve(family.son(), id, "{\"version\":0}").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP_ROLE_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM registration_candidates WHERE id = ?",
+                String.class, id)).isEqualTo("PENDING");
+
+        approve(family.mom(), id, "{\"version\":0}").andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/schedules/{id}", scheduleId).with(asUser(family.dad())))
+                .andExpect(jsonPath("$.startsAt").value(tomorrow + "T12:00:00+09:00"));
+    }
+
+    @Test
+    void 그사이_일정이_바뀌면_변경_승인과_되돌리기가_409다() throws Exception {
+        long scheduleId = ScheduleApi.create(mockMvc, family.groupId(), family.mom(),
+                ScheduleApi.timed("영화 보기", tomorrow + "T11:00", tomorrow + "T13:00", family.mom()));
+        long first = change(family.mom(), "영화 11시 말고 12시로 하자", "영화", "11시", "12시");
+        long second = change(family.mom(), "아니다 영화 11시 말고 3시로 하자", "영화", "11시", "3시");
+
+        approve(family.mom(), first, "{\"version\":0}").andExpect(status().isOk());
+        approve(family.mom(), second, "{\"version\":0}").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANDIDATE_TARGET_CHANGED"));
+
+        jdbcTemplate.update("UPDATE schedules SET version = version + 1 WHERE id = ?", scheduleId);
+        undo(family.mom(), first).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANDIDATE_TARGET_CHANGED"));
+        mockMvc.perform(get("/api/v1/schedules/{id}", scheduleId).with(asUser(family.mom())))
+                .andExpect(jsonPath("$.startsAt").value(tomorrow + "T12:00:00+09:00"));
+    }
+
+    @Test
+    void 할_일_완료_후보는_승인하면_완료하고_되돌리면_다시_연다() throws Exception {
+        long todoId = todoItem(family.mom(), "세제 사 오기");
+        long id = done(family.son(), "세제 사 왔어요", "세제");
+
+        mockMvc.perform(get("/api/v1/candidates/{id}", id).with(asUser(family.mom())))
+                .andExpect(jsonPath("$.candidate.type").value("TODO"))
+                .andExpect(jsonPath("$.candidate.fields.title").value("세제 사 오기"))
+                .andExpect(jsonPath("$.candidate.target.action").value("COMPLETE"))
+                .andExpect(jsonPath("$.candidate.target.entityId").value(todoId))
+                .andExpect(jsonPath("$.candidate.target.before.done").value(false));
+
+        approve(family.dad(), id, "{\"version\":0}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidate.entityType").value("TODO"))
+                .andExpect(jsonPath("$.candidate.entityId").value(todoId));
+        mockMvc.perform(get("/api/v1/todos/{id}", todoId).with(asUser(family.mom())))
+                .andExpect(jsonPath("$.done").value(true))
+                .andExpect(jsonPath("$.doneBy").value(family.dad()));
+        assertThat(count("todos WHERE group_id = " + family.groupId())).isEqualTo(1);
+        assertThat(lastSystemMessage()).endsWith("님이 '세제 사 오기' 할 일을 완료했어요.");
+
+        undo(family.dad(), id).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/todos/{id}", todoId).with(asUser(family.mom())))
+                .andExpect(jsonPath("$.done").value(false));
+    }
+
+    @Test
+    void 대상이_여럿이면_골라야_하고_고르면_EDITED로_남긴다() throws Exception {
+        long refill = todoItem(family.mom(), "세제 리필 주문");
+        todoItem(family.mom(), "세제 사 오기");
+        long id = done(family.son(), "세제 샀어", "세제");
+
+        mockMvc.perform(get("/api/v1/candidates/{id}", id).with(asUser(family.mom())))
+                .andExpect(jsonPath("$.candidate.missingFields[0]").value("targetId"))
+                .andExpect(jsonPath("$.candidate.target.entityId").doesNotExist())
+                .andExpect(jsonPath("$.candidate.target.choices.length()").value(2));
+        approve(family.mom(), id, "{\"version\":0}").andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("targetId"));
+        approve(family.mom(), id, "{\"version\":0,\"targetId\":999999}").andExpect(status().isBadRequest());
+
+        approve(family.mom(), id, "{\"version\":0,\"targetId\":%d}".formatted(refill)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidate.entityId").value(refill))
+                .andExpect(jsonPath("$.candidate.target.entityId").value(refill))
+                .andExpect(jsonPath("$.candidate.target.title").value("세제 리필 주문"));
+        assertThat(feedback(id)).containsExactly("EDITED:{targetId}");
+    }
+
+    @Test
+    void 바꿀_일정이나_끝낼_할_일이_없으면_후보를_만들지_않는다() throws Exception {
+        assertThat(change(family.mom(), "11시 말고 12시로 하자", "영화", "11시", "12시")).isEqualTo(-1);
+        assertThat(done(family.son(), "세제 샀어", "세제")).isEqualTo(-1);
+
+        todoItem(family.mom(), "세제 사 오기");
+        jdbcTemplate.update("UPDATE todos SET done_at = now(), done_by = ? WHERE group_id = ?", family.mom(),
+                family.groupId());
+        assertThat(done(family.son(), "세제 샀어", "세제")).isEqualTo(-1);
+    }
+
+    @Test
+    void 다른_그룹의_일정과_할_일은_대상이_되지_않는다() throws Exception {
+        Family other = Family.create(mockMvc, this::createUser);
+        ScheduleApi.create(mockMvc, other.groupId(), other.mom(),
+                ScheduleApi.timed("영화 보기", tomorrow + "T11:00", tomorrow + "T13:00", other.mom()));
+        mockMvc.perform(post("/api/v1/groups/{g}/todos", other.groupId()).with(asUser(other.mom()))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"세제 사 오기\"}"))
+                .andExpect(status().isCreated());
+
+        assertThat(change(family.mom(), "11시 말고 12시로 하자", "영화", "11시", "12시")).isEqualTo(-1);
+        assertThat(done(family.son(), "세제 샀어", "세제")).isEqualTo(-1);
+    }
+
     // ---- 무시 ----
 
     @Test
@@ -467,6 +620,31 @@ class CandidateApiTest extends ChatIntegrationTest {
         return candidate(sender, name + " 맛있더라", """
                 {"type":"PLACE","fields":{"name":"%s"%s},"confidence":0.85,"evidence":[{"messageId":%%d}]}"""
                 .formatted(name, opinion == null ? "" : ",\"opinion\":\"" + opinion + "\""));
+    }
+
+    private long change(long sender, String body, String title, String fromTime, String time) {
+        return candidate(sender, body, """
+                {"type":"SCHEDULE_CHANGE","fields":{"title":"%s","fromTimeText":"%s","startTimeText":"%s"},
+                 "confidence":0.85,"evidence":[{"messageId":%%d,"spans":["%s"]}]}""".formatted(title, fromTime, time,
+                time));
+    }
+
+    private long done(long sender, String body, String title) {
+        return candidate(sender, body, """
+                {"type":"TODO_DONE","fields":{"title":"%s"},"confidence":0.9,"evidence":[{"messageId":%%d}]}"""
+                .formatted(title));
+    }
+
+    private long todoItem(long userId, String title) throws Exception {
+        String body = mockMvc.perform(post("/api/v1/groups/{g}/todos", family.groupId()).with(asUser(userId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"%s\"}".formatted(title)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(body, "$.id")).longValue();
+    }
+
+    private String lastSystemMessage() {
+        return jdbcTemplate.queryForObject("SELECT body FROM messages WHERE room_id = ? AND type = 'SYSTEM' "
+                + "ORDER BY seq DESC LIMIT 1", String.class, roomId);
     }
 
     /** 메시지를 보내고, 그 메시지 하나가 분석 구간인 워커 결과로 후보를 만든다. @return 후보 id (안 만들어졌으면 -1) */

@@ -141,6 +141,27 @@ public class TodoService {
         return TodoResponse.from(todoRepository.saveAndFlush(todo), itemSources.find(ItemSources.TODO, todoId));
     }
 
+    /** AI 완료 후보 승인 (S19-2). 구성원 누구나. 이미 완료됐으면 409 CANDIDATE_TARGET_CHANGED. @return 할 일 제목 */
+    @Transactional
+    public String completeFromCandidate(long todoId, long userId) {
+        Todo todo = find(todoId);
+        accessChecker.requireMemberOrNotFound(todo.getGroupId(), userId);
+        if (!todo.complete(userId, Instant.now(clock))) {
+            throw new BusinessException(ErrorCode.CANDIDATE_TARGET_CHANGED);
+        }
+        todoRepository.saveAndFlush(todo);
+        return todo.getTitle();
+    }
+
+    /** AI 완료 후보 되돌리기: 다시 연다 (이미 열려 있으면 그대로) */
+    @Transactional
+    public void reopenFromCandidate(long todoId, long userId) {
+        Todo todo = find(todoId);
+        accessChecker.requireMemberOrNotFound(todo.getGroupId(), userId);
+        todo.reopen();
+        todoRepository.saveAndFlush(todo);
+    }
+
     @Transactional
     public void delete(long todoId, long userId) {
         Todo todo = find(todoId);

@@ -26,6 +26,7 @@ import com.famlog.candidate.repository.CandidateEvidenceWriter.EvidenceMessage;
 import com.famlog.candidate.service.CandidateBuilder;
 import com.famlog.candidate.service.CandidateBuilder.Built;
 import com.famlog.candidate.service.CandidatePlaceResolver;
+import com.famlog.candidate.service.CandidateTargets;
 import com.famlog.candidate.service.DedupKeys;
 import com.famlog.group.domain.FamilyRole;
 import com.famlog.support.FakeKakaoLocalClient;
@@ -39,6 +40,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>
  * 평소 테스트·CI 에서는 돌지 않는다 ({@code ./gradlew evalReplay}). 결과 파일이 없으면 건너뛴다.
  * 장소는 카카오를 부르지 않고 이름으로만 비교한다. 구성원은 M1 → 1, M2 → 2 … 로 둔다.
+ * 변경·완료 후보는 정답의 existing(이미 있는 일정·할 일)에서 대상을 찾는다 (S19-2).
  */
 @Tag("eval")
 class EvalReplayTest {
@@ -146,6 +148,7 @@ class EvalReplayTest {
                     refs.get(m.get("sender").asString()), m.get("text").asString(), sentAt));
         }
         CandidateBuilder.Context context = new CandidateBuilder.Context(members, List.of(), last);
+        CandidateTargets.Items items = items(testCase.path("existing"));
         List<Built> built = new ArrayList<>();
         Set<String> keys = new HashSet<>();
         for (JsonNode node : result.get("candidates")) {
@@ -162,15 +165,31 @@ class EvalReplayTest {
             if (evidence.isEmpty()) {
                 continue;
             }
+            final Instant now = last;
             builder.build(candidate, CandidateBuilder.anchorOf(candidate, evidence), context)
+                    .flatMap(b -> b.query() == null ? Optional.of(b) : CandidateTargets.resolve(b, items, now))
                     .filter(b -> keys.add(b.dedupKey()))
                     .ifPresent(built::add);
         }
         return built;
     }
 
+    /** 정답의 existing: 그룹에 이미 있는 일정·할 일 (LLM 에는 보내지 않고 서버 대상 찾기에만 쓴다) */
+    private static CandidateTargets.Items items(JsonNode existing) {
+        List<CandidateTargets.ScheduleItem> schedules = new ArrayList<>();
+        existing.path("schedules").forEach(s -> schedules.add(new CandidateTargets.ScheduleItem(s.get("id").asLong(),
+                s.get("title").asString(), OffsetDateTime.parse(s.get("startsAt").asString()).toInstant(),
+                OffsetDateTime.parse(s.get("endsAt").asString()).toInstant(), s.get("allDay").asBoolean(), 1)));
+        List<CandidateTargets.TodoItem> todos = new ArrayList<>();
+        existing.path("todos").forEach(t -> todos.add(new CandidateTargets.TodoItem(t.get("id").asLong(),
+                t.get("title").asString(), null, null)));
+        Set<Long> recent = new HashSet<>();
+        existing.path("recent").forEach(id -> recent.add(id.asLong()));
+        return new CandidateTargets.Items(schedules, todos, recent);
+    }
+
     private static boolean matches(JsonNode want, Built b) {
-        if (!b.type().name().equals(want.get("type").asString())) {
+        if (!b.type().name().equals(want.get("type").asString()) || want.has("action") != (b.target() != null)) {
             return false;
         }
         Map<String, Object> f = b.fields();
@@ -179,6 +198,8 @@ class EvalReplayTest {
             JsonNode value = entry.getValue();
             boolean ok = switch (key) {
                 case "type" -> true;
+                case "action" -> value.asString().equals(b.target().get("action"));
+                case "target" -> value.asString().equals(b.target().get("title"));
                 case "date", "startTime", "dueDate" -> Objects.equals(value.isNull() ? null : value.asString(),
                         f.get(key));
                 case "month", "day" -> Objects.equals(value.asInt(), f.get(key));
@@ -220,7 +241,8 @@ class EvalReplayTest {
         return built.stream().map(b -> b.type().name() + b.fields().entrySet().stream()
                 .filter(e -> List.of("title", "name", "date", "startTime", "dueDate", "month", "day", "assigneeIds")
                         .contains(e.getKey()))
-                .toList()).toList().toString();
+                .toList() + (b.target() == null ? "" : " " + b.target().get("action") + "→"
+                        + b.target().get("entityId"))).toList().toString();
     }
 
     private static String pct(int a, int b) {

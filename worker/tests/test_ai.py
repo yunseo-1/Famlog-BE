@@ -73,6 +73,8 @@ def test_유형마다_정해진_원문_표현_필드만_받는다():
         {"type": "TODO", "fields": {"title": "자동차 점검 맡기기", "dueText": "이번 주에", "assigneeTexts": ["아빠"]}},
         {"type": "ANNIVERSARY", "fields": {"title": "할머니 생신", "dateText": "다음 달 15일", "personText": "할머니"}},
         {"type": "PLACE", "fields": {"name": "OO칼국수", "regionHint": "잠실", "opinion": "칼국수가 정말 맛있음"}},
+        {"type": "SCHEDULE_CHANGE", "fields": {"title": "영화", "fromTimeText": "11시", "startTimeText": "12시"}},
+        {"type": "TODO_DONE", "fields": {"title": "세제"}},
     ]
     redis = FakeRedis()
     candidates = [dict(c, confidence=0.8, evidence=[{"messageId": 101}]) for c in valid]
@@ -80,7 +82,19 @@ def test_유형마다_정해진_원문_표현_필드만_받는다():
 
     [result] = redis.entries(SETTINGS.ai_results_stream)
     assert result["status"] == "DONE"
-    assert [c["type"] for c in json.loads(result["candidates"])] == ["TODO", "ANNIVERSARY", "PLACE"]
+    assert [c["type"] for c in json.loads(result["candidates"])] == ["TODO", "ANNIVERSARY", "PLACE",
+                                                                     "SCHEDULE_CHANGE", "TODO_DONE"]
+
+
+def test_구조화_출력이_채운_다른_유형의_빈_필드는_지우고_받는다():
+    padded = dict(CANDIDATE, type="TODO_DONE", fields={"title": "세제", "dueText": None, "dateText": None,
+                                                       "attendeeTexts": [], "assigneeTexts": []})
+    redis = FakeRedis()
+    AiConsumer(redis, SETTINGS, FakeLlmClient(json.dumps({"candidates": [padded]}))).handle("1-0", fields())
+
+    [result] = redis.entries(SETTINGS.ai_results_stream)
+    assert result["status"] == "DONE"
+    assert json.loads(result["candidates"])[0]["fields"] == {"title": "세제"}
 
 
 def test_다른_유형의_필드나_서버가_정할_값을_보내면_FAILED():
@@ -88,6 +102,7 @@ def test_다른_유형의_필드나_서버가_정할_값을_보내면_FAILED():
         dict(CANDIDATE, fields={"title": "할머니 댁 방문", "dueText": "이번 주에"}),  # 일정에 할 일 필드
         dict(CANDIDATE, fields={"title": "할머니 댁 방문", "date": "2026-11-14"}),  # 날짜 계산은 서버가 한다
         dict(CANDIDATE, inferred=["startTime.ampm"]),  # 추정 표시는 서버가 한다
+        dict(CANDIDATE, type="TODO_DONE", fields={"title": "세제", "entityId": 3}),  # 대상 찾기는 서버가 한다
         dict(CANDIDATE, fields={"title": "가" * 101}),
         {k: v for k, v in CANDIDATE.items() if k != "fields"},
     ]

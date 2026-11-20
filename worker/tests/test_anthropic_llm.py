@@ -12,7 +12,8 @@ import pytest
 
 from app.ai.consumer import AiConsumer
 from app.ai.llm import _FIELDS, OUTPUT_SCHEMA, PROMPT_PATH, AnthropicLlmClient, create_client
-from app.ai.schemas import AnniversaryFields, ExtractPayload, PlaceFields, ScheduleFields, TodoFields
+from app.ai.schemas import (AnniversaryFields, ExtractPayload, PlaceFields, ScheduleChangeFields, ScheduleFields,
+                            TodoDoneFields, TodoFields)
 from app.config import Settings
 from tests.conftest import FakeRedis
 from tests.test_ai import CANDIDATE, SECRET_TEXT, fields, payload
@@ -70,11 +71,15 @@ def test_지시문은_데이터_블록_안의_지시를_따르지_말라고_한�
 
 def test_구조화_출력_스키마의_필드는_검증_모델과_같다():
     models = {"SCHEDULE": ScheduleFields, "TODO": TodoFields, "ANNIVERSARY": AnniversaryFields,
-              "PLACE": PlaceFields}
+              "PLACE": PlaceFields, "SCHEDULE_CHANGE": ScheduleChangeFields, "TODO_DONE": TodoDoneFields}
     for kind, model in models.items():
         aliases = {info.alias or name for name, info in model.model_fields.items()}
         assert set(_FIELDS[kind]) == aliases, kind
-    assert len(OUTPUT_SCHEMA["properties"]["candidates"]["items"]["anyOf"]) == 4
+    item = OUTPUT_SCHEMA["properties"]["candidates"]["items"]
+    assert item["properties"]["type"]["enum"] == list(models)
+    fields_schema = item["properties"]["fields"]
+    assert set(fields_schema["properties"]) == {f for props in _FIELDS.values() for f in props}
+    assert set(fields_schema["required"]) == set(fields_schema["properties"])  # 선택 필드는 API 한도를 넘는다
 
 
 def test_모델_프롬프트_버전과_캐시_토큰을_결과로_보낸다():
@@ -85,7 +90,7 @@ def test_모델_프롬프트_버전과_캐시_토큰을_결과로_보낸다():
 
     [result] = redis.entries(SETTINGS.ai_results_stream)
     assert result["status"] == "DONE"
-    assert (result["modelVersion"], result["promptVersion"]) == ("claude-haiku-5-5", "extract_v1")
+    assert (result["modelVersion"], result["promptVersion"]) == ("claude-haiku-5-5", "extract_v2")
     assert (result["inputTokens"], result["outputTokens"]) == ("300", "80")
     assert (result["cacheReadTokens"], result["cacheWriteTokens"]) == ("1200", "0")
 

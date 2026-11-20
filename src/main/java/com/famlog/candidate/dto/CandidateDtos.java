@@ -33,6 +33,9 @@ public final class CandidateDtos {
      * @param anchorMessageId 카드를 붙일 메시지 (마지막 근거 메시지)
      * @param entityType      승인해서 만든 항목 SCHEDULE(기념일 포함)·TODO·PLACE
      * @param linkedExisting  장소 후보를 이미 공유된 장소에 연결했다 (새로 만들지 않음)
+     * @param target          기존 항목 변경·완료 후보의 대상 (새 항목 후보는 null). entityType SCHEDULE·TODO,
+     *                        action CHANGE·COMPLETE, entityId·title·before(·after), 일정은 createdBy.
+     *                        여럿이면 entityId 가 null 이고 choices 에서 고른다
      */
     public record CandidateResponse(long id, long groupId, CandidateType type, CandidateStatus status,
             @Schema(description = "정규화한 값 (유형별 형태는 HANDOFF 후보 생성 규칙)") Map<String, Object> fields,
@@ -41,6 +44,8 @@ public final class CandidateDtos {
             Surface surface, Long anchorMessageId, Long anchorSeq,
             @Schema(description = "승인·무시할 때 보낸다") long version, Long decidedBy, Instant decidedAt,
             DismissReason dismissReason, String entityType, Long entityId, boolean linkedExisting,
+            @Schema(description = "기존 일정 변경·할 일 완료 후보의 대상 (HANDOFF 후보 API 규칙 S19-2). 새 항목 후보는 null")
+            Map<String, Object> target,
             Instant expiresAt, Instant createdAt) {
     }
 
@@ -59,10 +64,12 @@ public final class CandidateDtos {
 
     /**
      * 승인. 유형에 맞는 값 하나를 보내면 그 값을 최종으로 쓰고(수정 폼), 아무것도 안 보내면 후보 값 그대로 등록한다.
-     * 일정·기념일은 일정 등록 요청, 할 일은 할 일 등록 요청과 같은 형태
+     * 일정·기념일은 일정 등록 요청, 할 일은 할 일 등록 요청과 같은 형태.
+     * 기존 항목 변경·완료 후보(target)는 값을 보내지 않고, 대상이 여럿이면 targetId 로 고른다
      */
     public record ApproveRequest(@Schema(description = "조회한 후보의 version") @NotNull Long version,
-            @Valid ScheduleRequest schedule, @Valid CreateTodoRequest todo, @Valid ApprovePlace place) {
+            @Valid ScheduleRequest schedule, @Valid CreateTodoRequest todo, @Valid ApprovePlace place,
+            @Schema(description = "변경·완료 후보: target.choices 중 고른 entityId") Long targetId) {
     }
 
     /** @param kakaoPlaceId 후보의 options 중 하나, 또는 방금 검색한 장소 */

@@ -71,6 +71,11 @@ public class RegistrationCandidate extends BaseTimeEntity {
     @Column(name = "dedup_key", nullable = false, updatable = false)
     private String dedupKey;
 
+    /** 기존 항목 변경·완료 후보의 대상 JSON (형태는 HANDOFF "후보 API 규칙 (S19-2)"). 새 항목 후보는 null */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "target_ref")
+    private String targetRef;
+
     @Column(name = "model_version", updatable = false)
     private String modelVersion;
 
@@ -103,7 +108,7 @@ public class RegistrationCandidate extends BaseTimeEntity {
 
     public RegistrationCandidate(AiJob job, AiJob.Usage usage, CandidateType type, String fields,
             List<String> inferredFields, List<String> missingFields, double confidence, String dedupKey,
-            Instant expiresAt) {
+            Instant expiresAt, String targetRef) {
         this.groupId = job.getGroupId();
         this.roomId = job.getRoomId();
         this.jobId = job.getId();
@@ -117,6 +122,16 @@ public class RegistrationCandidate extends BaseTimeEntity {
         this.modelVersion = usage.modelVersion();
         this.promptVersion = usage.promptVersion();
         this.expiresAt = expiresAt;
+        this.targetRef = targetRef;
+    }
+
+    public boolean hasTarget() {
+        return targetRef != null;
+    }
+
+    /** 승인할 때 실제로 바꾼 대상과 되돌릴 값을 남긴다 */
+    public void recordTarget(String targetRef) {
+        this.targetRef = targetRef;
     }
 
     /** 아직 처리할 수 있는 후보 (PENDING 이고 만료 전) */

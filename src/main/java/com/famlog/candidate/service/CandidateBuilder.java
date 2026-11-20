@@ -1,5 +1,6 @@
 package com.famlog.candidate.service;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -12,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
@@ -54,12 +57,27 @@ public class CandidateBuilder {
     static final String INFERRED_DUE = "dueDate";
     private static final int MAX_OPINION = 200;
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
+    /** 주 없이 요일만 말한 날짜 ("목요일", "목요일로") */
+    private static final Pattern BARE_WEEKDAY = Pattern.compile("\\s*([월화수목금토일])요일\\s*");
+    private static final List<DayOfWeek> WEEKDAYS = List.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY);
 
     private final CandidatePlaceResolver placeResolver;
 
-    /** 정규화한 후보 (저장 전) */
+    /**
+     * 정규화한 후보 (저장 전).
+     *
+     * @param query  기존 항목 변경·완료 표현이면 찾을 대상 (CandidateTargets 가 target 으로 바꾼다)
+     * @param target 찾은 대상 (target_ref)
+     */
     public record Built(CandidateType type, Map<String, Object> fields, List<String> inferred, List<String> missing,
-            double confidence, String dedupKey, Instant expiresAt) {
+            double confidence, String dedupKey, Instant expiresAt, CandidateTargets.Query query,
+            Map<String, Object> target) {
+
+        Built(CandidateType type, Map<String, Object> fields, List<String> inferred, List<String> missing,
+                double confidence, String dedupKey, Instant expiresAt) {
+            this(type, fields, inferred, missing, confidence, dedupKey, expiresAt, null, null);
+        }
     }
 
     /** 후보를 만들 때 쓰는 그룹 정보 */
@@ -72,7 +90,8 @@ public class CandidateBuilder {
             return Optional.empty();
         }
         ExtractedFields fields = candidate.fields() == null
-                ? new ExtractedFields(null, null, null, null, null, null, null, null, null, null, null, null)
+                ? new ExtractedFields(null, null, null, null, null, null, null, null, null, null, null, null, null,
+                        null)
                 : candidate.fields();
         ZonedDateTime sentAt = anchor.sentAt().atZone(FamlogTime.DISPLAY_ZONE);
         return switch (candidate.type()) {
@@ -80,6 +99,8 @@ public class CandidateBuilder {
             case TODO -> todo(fields, anchor, sentAt, context, candidate.confidence());
             case ANNIVERSARY -> anniversary(fields, sentAt, context, candidate.confidence());
             case PLACE -> place(fields, anchor, context, candidate.confidence());
+            case SCHEDULE_CHANGE -> scheduleChange(fields, anchor, sentAt, context, candidate.confidence());
+            case TODO_DONE -> todoDone(fields, context, candidate.confidence());
         };
     }
 
@@ -239,6 +260,56 @@ public class CandidateBuilder {
         fields.put("recommendedBy", anchor.senderId());
         return Optional.of(new Built(CandidateType.PLACE, fields, List.of(), missing, confidence,
                 DedupKeys.place(kakaoPlaceId, name), context.now().plus(DEFAULT_TTL)));
+    }
+
+    /**
+     * 일정 변경 표현 ("11시 말고 12시로"). 바꿀 날짜·시각이 없거나 바꿀 날짜가 지났으면 만들지 않는다.
+     * 대상은 아직 모른다 (CandidateTargets)
+     */
+    private Optional<Built> scheduleChange(ExtractedFields f, EvidenceMessage anchor, ZonedDateTime sentAt,
+            Context context, double confidence) {
+        LocalDate fromDate = DateNormalizer.scheduleDate(f.fromDateText(), sentAt, null)
+                instanceof DateResult.Resolved resolved ? resolved.date() : null;
+        TimeResult fromTime = TimeNormalizer.resolve(f.fromTimeText(), anchor.body()).filter(t -> !t.nextDay())
+                .orElse(null);
+        LocalDate date = null;
+        boolean dateInferred = false;
+        if (text(f.dateText()) != null) {
+            switch (DateNormalizer.scheduleDate(f.dateText(), sentAt, null)) {
+                case DateResult.Past past -> {
+                    return Optional.empty();
+                }
+                case DateResult.Unknown unknown -> {
+                }
+                case DateResult.Resolved resolved -> {
+                    date = resolved.date();
+                    dateInferred = resolved.inferred();
+                }
+            }
+        }
+        TimeResult startTime = TimeNormalizer.resolve(f.startTimeText(), anchor.body()).filter(t -> !t.nextDay())
+                .orElse(null);
+        if (date == null && startTime == null) {
+            return Optional.empty();
+        }
+        Matcher weekday = BARE_WEEKDAY.matcher(f.dateText() == null ? "" : f.dateText());
+        CandidateTargets.Query query = new CandidateTargets.Query(CandidateTargets.CHANGE, text(f.title()),
+                fromDate, fromTime, date, startTime, CandidateTargets.inferredOf(startTime, dateInferred),
+                weekday.matches() ? WEEKDAYS.get("월화수목금토일".indexOf(weekday.group(1))) : null);
+        return Optional.of(new Built(CandidateType.SCHEDULE, Map.of(), List.of(), List.of(), confidence, "",
+                context.now().plus(DEFAULT_TTL), query, null));
+    }
+
+    /** 할 일 완료 표현 ("세제 샀어"). 핵심어가 없으면 만들지 않는다. 대상은 아직 모른다 (CandidateTargets) */
+    private Optional<Built> todoDone(ExtractedFields f, Context context, double confidence) {
+        String keyword = text(f.title());
+        if (keyword == null) {
+            return Optional.empty();
+        }
+        CandidateTargets.Query query = new CandidateTargets.Query(CandidateTargets.COMPLETE, keyword, null, null,
+                null, null, List.of(), null);
+        return Optional.of(new Built(CandidateType.TODO, Map.of(), List.of(), List.of(), confidence, "",
+                context.now().plus(DEFAULT_TTL), query, null));
     }
 
     /** {text, aliasId, placeId}. 별칭과 맞으면 그 별칭과 연결된 장소 */

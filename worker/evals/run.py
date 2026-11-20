@@ -1,6 +1,6 @@
 """평가셋 1단계: 가상 가족 대화(cases.jsonl)로 실제 LLM 을 불러 결과를 out/results.jsonl 에 저장한다 (사양서 7.3).
 
-실제 API 를 부르므로 돈이 든다 (claude-haiku-5-5 로 50건 약 0.02달러). 돌리기 전에 사용자 확인을 받는다.
+실제 API 를 부르므로 돈이 든다 (claude-haiku-5-5 로 60건 약 0.01달러). 돌리기 전에 사용자 확인을 받는다.
 2단계(날짜 정확도 등 지표)는 서버 정규화를 거쳐야 해서 API 저장소의 ./gradlew evalReplay 가 계산한다.
 
     docker run --rm -e ANTHROPIC_API_KEY -v "$PWD/worker/evals:/worker/evals" famlog-worker-test python -m evals.run
