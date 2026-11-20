@@ -12,6 +12,27 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /api/v1/ai-notice:
+    get:
+      description: "무엇이 어디로 전송되는지와 국외 이전 고지. 그룹 AI 분석을 켤 때(관리자)와 그룹 설정의 aiNoticePending=true\
+        \ 일 때(구성원) 보여 주고, 확인한 version 을 보낸다"
+      operationId: aiNotice
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiNotice"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: AI 분석 안내
+      tags:
+      - ai-notice-controller
   /api/v1/auth/logout:
     post:
       description: 이 기기의 세션을 폐기한다. 모르는 토큰이어도 204
@@ -2016,9 +2037,11 @@ paths:
       - consent-controller
   /api/v1/users/me/consents/{type}:
     put:
-      description: "지금은 LOCATION(위치기반서비스 이용약관 + 개인위치정보 수집·이용)만. 동의 {agreed:true, docVersion}(현\
-        재 버전과 다르면 400), 철회 {agreed:false} → 내가 올린 사진의 위치도 지운다. TERMS·PRIVACY·AI_ANALYSIS·\
-        OVERSEAS_TRANSFER 는 400"
+      description: "LOCATION(위치기반서비스 이용약관 + 개인위치정보 수집·이용)과 AI_ANALYSIS. 동의 {agreed:true,\
+        \ docVersion}(현재 버전과 다르면 400), 철회 {agreed:false}. LOCATION 철회 → 내가 올린 사진의\
+        \ 위치도 지운다. AI_ANALYSIS 는 AI 분석 안내(GET /ai-notice) 확인으로, OVERSEAS_TRANSFER\
+        \ 도 함께 기록·철회하고 철회하면 내 모든 그룹에서 분석 제외를 켠다. TERMS·PRIVACY·OVERSEAS_TRANSFER 는\
+        \ 400"
       operationId: updateConsent
       parameters:
       - in: path
@@ -2304,6 +2327,29 @@ components:
       required:
       - privacyVersion
       - termsVersion
+    AiNotice:
+      type: object
+      properties:
+        country:
+          type: string
+        notSentItems:
+          type: array
+          items:
+            type: string
+        purpose:
+          type: string
+        recipient:
+          type: string
+        refusal:
+          type: string
+        retention:
+          type: string
+        sentItems:
+          type: array
+          items:
+            type: string
+        version:
+          type: string
     AliasListResponse:
       type: object
       properties:
@@ -2767,6 +2813,10 @@ components:
         aiEnabledAt:
           type: string
           format: date-time
+        aiNoticePending:
+          type: boolean
+        aiNoticeVersion:
+          type: string
     GroupSummaryResponse:
       type: object
       properties:
@@ -2909,6 +2959,9 @@ components:
     MemberResponse:
       type: object
       properties:
+        aiOptOut:
+          type: boolean
+          description: "AI 분석 제외 (그룹 상세에서 ADMIN 이상에게만, 아니면 null)"
         calendarColor:
           type: string
         familyRole:
@@ -3705,6 +3758,12 @@ components:
         aiAnalysisEnabled:
           type: boolean
           description: AI 분석 켜기 (채팅에서 일정·할 일·장소 후보를 찾는다)
+        aiNoticeVersion:
+          type: string
+          description: "켤 때 필수: 보여 준 AI 분석 안내 버전"
+          example: "1.0"
+          maxLength: 20
+          minLength: 0
       required:
       - aiAnalysisEnabled
     UpdateMyMemberRequest:

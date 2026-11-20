@@ -118,6 +118,8 @@
 | 11/20 | S19-1: `source`에 `candidateId` 추가. 마이그레이션 없이 후보의 `created_entity_*`·근거 메시지로 찾는다 | 앱 요청, 사용자 결정 |
 | 11/20 | S19-2: 변경·완료 표현은 LLM이 원문만 뽑고(`SCHEDULE_CHANGE`·`TODO_DONE`) 서버가 그룹의 기존 항목에서 대상을 찾는다(목록을 LLM에 보내지 않음). 일정은 앞으로 60일·반복 아님·날짜/시각만, 할 일은 열린 것. 못 찾으면 버리고 여럿이면 5개까지 고르게 한다 | 사용자 결정 |
 | 11/20 | 변경 승인은 기존 일정 수정 권한(등록한 사람·ADMIN 이상, 아니면 403), 완료는 구성원 누구나. 그사이 대상이 바뀌었으면 409 `CANDIDATE_TARGET_CHANGED`. 되돌리면 바꾸기 전 값(그사이 또 바뀌었으면 409)·할 일 다시 열기. 프롬프트 `extract_v2` | 사용자 결정 |
+| 11/20 | S20 나누기: S20-1 AI 안내·동의 → S20-2 신고·관리자 도구(환경변수 관리자 토큰 + 정적 페이지) → S20-3 계정 삭제(그룹장은 넘긴 뒤, 미디어 삭제 선택, 웹은 정적 안내 + 개발자 이메일) → S20-4 내보내기(서버 ZIP, 7일 링크) → S20-5 운영 배치. 계약이 바뀔 때마다 모바일에 알린다 | 사용자 결정 |
+| 11/20 | AI 분석 동의는 고지 확인 방식(기본 분석, 개인 제외). 국외 이전도 같은 안내 버전으로 함께 기록. 동의 철회 = 모든 그룹 분석 제외 | 사용자 결정, 8.3 (법률 검토로 바뀔 수 있게 버전 관리) |
 
 ## 3. Figma 상태
 
@@ -180,7 +182,8 @@
 | S18-2 | 실제 LLM(claude-haiku-5-5, 캐싱)·프롬프트 extract_v1·호출/비용 상한·평가셋 50건 | ✅ PR #21 |
 | S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ PR #22 |
 | S19-1 | ARC-06 원문 보기 강조용 `source.candidateId` | ✅ PR #23 |
-| S19-2 | ARC-04·6.4 기존 일정 변경·할 일 완료 후보(`target_ref`), 프롬프트 extract_v2, 평가셋 60건 | ✅ 이번 PR |
+| S19-2 | ARC-04·6.4 기존 일정 변경·할 일 완료 후보(`target_ref`), 프롬프트 extract_v2, 평가셋 60건 | ✅ PR #24 |
+| S20-1 | SET-01 AI 분석 안내·동의(고지 확인), 철회 시 전체 분석 제외, 관리자의 분석 제외 보기 | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -325,9 +328,17 @@
 
 ### AI 분석 규칙 (S16, 앱 S19·S20 참고)
 
-**그룹 설정** `GET|PATCH /groups/{groupId}/settings` — `{aiAnalysisEnabled}` → `{aiAnalysisEnabled, aiEnabledAt}`
+**그룹 설정** `GET|PATCH /groups/{groupId}/settings` — `{aiAnalysisEnabled, aiNoticeVersion?}` → `{aiAnalysisEnabled, aiEnabledAt, aiNoticeVersion, aiNoticePending}`
 - 기본 꺼짐. 조회는 구성원, 변경은 ADMIN 이상(MEMBER 403 `GROUP_ROLE_REQUIRED`), 값 없으면 400
 - 켜면 그 뒤 메시지부터 분석한다 (켜기 전 대화는 보내지 않는다)
+
+**AI 분석 안내·동의 (S20-1, SET-01·8.3)** — 고지 확인 방식: 확인하지 않아도 분석은 되고, 개인은 언제든 분석 제외
+- `GET /ai-notice` → `{version, recipient, country, sentItems[], notSentItems[], purpose, retention, refusal}` (서버 설정 `famlog.consent.ai-notice`, 문구 초안: S22 전 Anthropic 조건·법률 검토로 확정). 문구를 고치면 version을 올린다 → 모두 다시 안내
+- 꺼진 그룹을 켤 때 `aiNoticeVersion` 필수(관리자에게 안내를 보여 준 버전). 없거나 현재 버전과 다르면 400 `VALIDATION_FAILED`(field `aiNoticeVersion`). 켜면 그 관리자의 AI_ANALYSIS·OVERSEAS_TRANSFER 확인을 기록. 끌 때·이미 켜진 상태는 필요 없음
+- `aiNoticePending`: 켜져 있는데 내가 현재 버전 안내를 확인하지 않았으면 true → 앱이 안내 시트를 한 번([확인] / [내 메시지 분석 제외])
+- 확인·철회 `PUT /users/me/consents/AI_ANALYSIS {agreed, docVersion}`: 확인은 AI_ANALYSIS·OVERSEAS_TRANSFER를 같은 버전으로 함께 기록(버전 다르면 400 field `docVersion`). 철회 `{agreed:false}`는 둘 다 철회 + 내 모든 그룹에서 `aiOptOut=true`. 다시 확인해도 그룹별 제외는 자동으로 풀지 않음. `OVERSEAS_TRANSFER` 단독 PUT은 400
+- `GET /users/me/consents`: AI_ANALYSIS·OVERSEAS_TRANSFER의 `currentVersion`이 안내 버전으로 나온다 (동의 내역 화면)
+- 그룹 상세 `members[].aiOptOut`: ADMIN 이상에게만 true/false, 그 밖에는 null (볼 수만 있다, 8.8)
 
 **개인 분석 제외** `PATCH /groups/{groupId}/members/me/preferences` — `{notifMuted?, aiOptOut?}` 보낸 값만 (둘 다 없으면 400). 응답 `{notifMuted, aiOptOut}`
 - 본인만 바꾼다 (관리자도 못 바꾼다, 사양서 8.8). 제외했던 동안의 메시지는 다시 켜도 보내지 않는다
@@ -426,7 +437,7 @@
 - S20: 비용 80%·상한 도달을 로그 대신 관리자 알림으로. 사용자: 처리방침용 Anthropic 데이터 처리 조건(학습 사용·보관 기간) 확인(S22 전)
 - 프롬프트·모델을 바꾸면 `worker/evals/README.md` 순서로 평가하고 기록 표에 남긴다 (실제 호출은 사용자 확인 후)
 - 다음(S20~): 변경 후보의 제목·참석자·장소 변경과 승인 전 값 고치기(v1.1), 근거만 늘어난 후보의 이벤트, 후보 [신고](MOD-01), 참석자·담당자 개별 푸시, 기념일 1주 전 알림·음력(v1.1), 만료 후보 정리 배치
-- S20: AI 분석 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS`/`OVERSEAS_TRANSFER` 동의, 관리자가 구성원의 분석 제외 여부를 보는 화면(8.8), 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리
+- S20-5: 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리 (AI 안내·동의·관리자 분석 제외 보기는 S20-1에서 완료)
 - S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인
 - S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지

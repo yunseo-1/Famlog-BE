@@ -123,7 +123,8 @@ public class GroupService {
         Map<Long, User> users = userRepository.findAllById(members.stream().map(GroupMember::getUserId).toList())
                 .stream().collect(Collectors.toMap(User::getId, Function.identity()));
         return new GroupDetailResponse(group.getId(), group.getName(), group.getImageKey(), myRole,
-                members.stream().map(member -> MemberResponse.of(member, users.get(member.getUserId()))).toList());
+                members.stream().map(member -> MemberResponse.of(member, users.get(member.getUserId()),
+                        myRole.atLeast(GroupRole.ADMIN))).toList());
     }
 
     /** 그룹 삭제 (OWNER). 즉시 접근을 막고 유예 기간 뒤 파기한다 */
