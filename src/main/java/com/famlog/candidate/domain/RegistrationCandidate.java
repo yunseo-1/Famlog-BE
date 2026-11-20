@@ -154,6 +154,12 @@ public class RegistrationCandidate extends BaseTimeEntity {
         this.dismissReason = reason;
     }
 
+    /** 관리자가 신고를 처리하며 무시로 바꾼다 (MOD-01). 처리한 가족은 없다 */
+    public void dismissByAdmin(Instant now) {
+        this.status = CandidateStatus.DISMISSED;
+        this.decidedAt = now;
+    }
+
     /** 승인을 되돌린다. 처리한 사람·시각은 승인 때 그대로 둔다 */
     public void undo() {
         this.status = CandidateStatus.UNDONE;

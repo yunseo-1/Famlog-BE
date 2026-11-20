@@ -35,6 +35,9 @@ famlog:
   # FCM 서비스 계정 키 (저장소 밖 경로). 비어 있으면 푸시를 보내지 않고 로그만 남긴다
   push:
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+  # 관리자 도구 토큰 (infra/.env FAMLOG_ADMIN_TOKEN)
+  admin:
+    token: ${FAMLOG_ADMIN_TOKEN:}
   auth:
     jwt:
       active-kid: ${JWT_ACTIVE_KID}

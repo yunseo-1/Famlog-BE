@@ -17,6 +17,8 @@ import com.famlog.chat.domain.Message;
 import com.famlog.chat.repository.MessageRepository;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.flag.FeatureFlag;
+import com.famlog.common.flag.FeatureFlags;
 import com.famlog.group.repository.GroupMemberRepository;
 import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.media.domain.MediaAsset;
@@ -64,6 +66,7 @@ public class MediaService {
     private final MediaStorage storage;
     private final MediaJobPublisher jobPublisher;
     private final MediaProperties properties;
+    private final FeatureFlags featureFlags;
     private final JsonMapper jsonMapper;
     private final Clock clock;
 
@@ -154,9 +157,21 @@ public class MediaService {
         return storage.presignGet(key, properties.downloadUrlTtl());
     }
 
+    /** 신고할 수 있는 미디어의 그룹 (MOD-01): 내가 볼 수 있는 메시지에 붙은 미디어. 아니면 404 */
+    @Transactional(readOnly = true)
+    public long groupOfReportableMedia(long mediaId, long userId) {
+        MediaAsset media = mediaRepository.findById(mediaId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        accessChecker.requireMemberOrNotFound(media.getGroupId(), userId);
+        if (!isVisible(media, userId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return media.getGroupId();
+    }
+
     /** 워커가 위치를 읽어도 되는지: 기능 플래그가 켜져 있고 올린 사람이 "사진 위치 사용"(LOCATION)에 동의 (사양서 8.6) */
     public boolean extractLocation(long userId) {
-        return properties.photoLocationEnabled()
+        return featureFlags.enabled(FeatureFlag.MEDIA_PHOTO_LOCATION, properties.photoLocationEnabled())
                 && consentRepository.existsByUserIdAndTypeAndWithdrawnAtIsNull(userId, ConsentType.LOCATION);
     }
 

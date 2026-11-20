@@ -23,6 +23,16 @@ public class AuditLogger {
 
     public void record(long actorId, AuditAction action, String targetType, Long targetId, Long groupId,
             Map<String, ?> meta) {
+        insert(actorId, action, targetType, targetId, groupId, meta);
+    }
+
+    /** 관리자 도구의 동작 (관리자 토큰이라 사용자 actor 가 없다) */
+    public void recordAdmin(AuditAction action, String targetType, Long targetId, Long groupId, Map<String, ?> meta) {
+        insert(null, action, targetType, targetId, groupId, meta);
+    }
+
+    private void insert(Long actorId, AuditAction action, String targetType, Long targetId, Long groupId,
+            Map<String, ?> meta) {
         jdbcTemplate.update("""
                 INSERT INTO audit_logs (actor_id, action, target_type, target_id, group_id, meta, ip)
                 VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)

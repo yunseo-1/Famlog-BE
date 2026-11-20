@@ -310,6 +310,31 @@ public class ChatService {
         return response;
     }
 
+    /** 신고할 수 있는 메시지의 그룹 (MOD-01): 내 그룹의, 내가 들어온 뒤의, 사람이 보낸 메시지. 아니면 404, 시스템 메시지는 400 */
+    @Transactional(readOnly = true)
+    public long groupOfReportableMessage(long messageId, long userId) {
+        VisibleMessage visible = visibleMessage(messageId, userId);
+        if (visible.message().getType() == MessageType.SYSTEM) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "시스템 메시지는 신고할 수 없어요.");
+        }
+        return visible.groupId();
+    }
+
+    /** 관리자 조치 (MOD-01): 신고된 메시지를 모두에게서 숨긴다(삭제 처리). 이미 지웠으면 그대로 */
+    @Transactional
+    public void hideByAdmin(long messageId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (message.isDeleted()) {
+            return;
+        }
+        long groupId = roomRepository.findById(message.getRoomId()).orElseThrow().getGroupId();
+        message.delete(Instant.now(clock));
+        reactionRepository.deleteByMessageId(message.getId());
+        relay.toGroup(groupId, ChatEvent.MESSAGE_DELETED, new MessageDeleted(groupId, message.getId(),
+                message.getSeq()));
+    }
+
     private record VisibleMessage(Message message, long groupId) {
     }
 

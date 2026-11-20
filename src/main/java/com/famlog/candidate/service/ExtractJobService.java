@@ -12,6 +12,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.famlog.common.flag.FeatureFlag;
+import com.famlog.common.flag.FeatureFlags;
 import com.famlog.candidate.domain.AiJob;
 import com.famlog.candidate.domain.AiTrigger;
 import com.famlog.candidate.dto.ExtractDtos.ExtractMessage;
@@ -50,6 +52,7 @@ public class ExtractJobService {
     private final GroupSettingsService settingsService;
     private final ExtractJobPublisher publisher;
     private final AiProperties properties;
+    private final FeatureFlags featureFlags;
     private final JsonMapper jsonMapper;
     private final AiCostGuard costGuard;
     private final Clock clock;
@@ -63,7 +66,8 @@ public class ExtractJobService {
         long fromSeq = room.analyzedSeq();
         long toSeq = room.lastSeq();
         GroupSettings settings = settingsService.find(room.groupId());
-        List<SourceMessage> messages = properties.enabled() && settings.isAiAnalysisEnabled()
+        List<SourceMessage> messages = featureFlags.enabled(FeatureFlag.AI_ANALYSIS, properties.enabled())
+                && settings.isAiAnalysisEnabled()
                 ? sourceReader.eligibleMessages(room, fromSeq, toSeq, settings.getAiEnabledAt(),
                         properties.maxMessages())
                 : List.of();

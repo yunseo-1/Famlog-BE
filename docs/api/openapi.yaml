@@ -11,7 +11,314 @@ servers:
 - url: /
 security:
 - bearerAuth: []
+tags:
+- description: 관리자 도구 (X-Admin-Token)
+  name: admin
 paths:
+  /admin/api/app-versions:
+    get:
+      operationId: appVersions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppVersion"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/app-versions/{platform}:
+    put:
+      description: 최소 지원 버전보다 낮은 앱(X-App-Version)은 426 UPGRADE_REQUIRED
+      operationId: updateAppVersion
+      parameters:
+      - in: path
+        name: platform
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppVersionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppVersion"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 앱 버전
+      tags:
+      - admin
+  /admin/api/audit-logs:
+    get:
+      operationId: auditLogs
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLogItem"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/feature-flags:
+    get:
+      operationId: featureFlags
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureFlagItem"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/feature-flags/{key}:
+    put:
+      operationId: updateFeatureFlag
+      parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeatureFlagRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagItem"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/holidays:
+    get:
+      operationId: holidays
+      parameters:
+      - in: query
+        name: year
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminHoliday"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+    post:
+      operationId: addHoliday
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddHolidayRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminHoliday"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/holidays/{holidayId}:
+    delete:
+      operationId: deleteHoliday
+      parameters:
+      - in: path
+        name: holidayId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      tags:
+      - admin
+  /admin/api/reports:
+    get:
+      description: "아동 안전 먼저, 그다음 최신 순. 콘텐츠는 넣지 않는다"
+      operationId: reports
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - REVIEWED
+          - ACTIONED
+          - REJECTED
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPage"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 신고 목록
+      tags:
+      - admin
+  /admin/api/reports/{reportId}:
+    get:
+      description: 신고된 콘텐츠 하나를 보여 주고 감사 로그(ADMIN_REPORT_VIEWED)를 남긴다
+      operationId: report
+      parameters:
+      - in: path
+        name: reportId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDetail"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 신고 상세
+      tags:
+      - admin
+  /admin/api/reports/{reportId}/resolve:
+    post:
+      description: "REVIEWED·ACTIONED·REJECTED. ACTIONED 조치: 메시지·사진 HIDE_MESSAGE,\
+        \ AI 후보 DISMISS_CANDIDATE. 같은 대상의 처리 전 신고를 함께 처리한다"
+      operationId: resolve
+      parameters:
+      - in: path
+        name: reportId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveReportRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveReportResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 신고 처리
+      tags:
+      - admin
   /api/v1/ai-notice:
     get:
       description: "무엇이 어디로 전송되는지와 국외 이전 고지. 그룹 AI 분석을 켤 때(관리자)와 그룹 설정의 aiNoticePending=true\
@@ -33,6 +340,28 @@ paths:
       summary: AI 분석 안내
       tags:
       - ai-notice-controller
+  /api/v1/app/config:
+    get:
+      description: "X-Platform(기본 ANDROID) 기준 최소·최신 버전, 공지, 기능 상태. 앱 버전(X-App-Version)이\
+        \ minSupportedVersion 보다 낮으면 다른 API 는 426 UPGRADE_REQUIRED"
+      operationId: appConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfigResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      security: []
+      summary: 앱 설정
+      tags:
+      - app-config-controller
   /api/v1/auth/logout:
     post:
       description: 이 기기의 세션을 폐기한다. 모르는 토큰이어도 204
@@ -1439,7 +1768,7 @@ paths:
   /api/v1/holidays:
     get:
       description: 그해 공휴일·대체공휴일 (날짜 순). 데이터가 없는 해는 빈 목록
-      operationId: holidays
+      operationId: holidays_1
       parameters:
       - in: query
         name: year
@@ -1851,6 +2180,34 @@ paths:
       summary: 다녀옴·가고 싶어요 표시
       tags:
       - place-controller
+  /api/v1/reports:
+    post:
+      description: "메시지(MESSAGE)·사진/동영상(MEDIA)·AI 후보(AI_OUTPUT)·구성원(USER, groupId\
+        \ 필요). 내가 볼 수 없는 대상은 404, 구성원이 아닌 그룹은 403. OTHER 는 detail 필수. 처리 전에 같은 대상을\
+        \ 다시 신고하면 그 신고를 그대로 돌려준다 (201)"
+      operationId: createReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportResponse"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 신고
+      tags:
+      - report-controller
   /api/v1/schedules/{scheduleId}:
     delete:
       description: 반복 일정은 시리즈 전체를 지운다. MEMBER 는 본인이 등록한 일정만
@@ -2311,6 +2668,34 @@ paths:
       - famlog-error-controller
 components:
   schemas:
+    AddHolidayRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+          maxLength: 30
+          minLength: 0
+        substitute:
+          type: boolean
+      required:
+      - date
+      - name
+    AdminHoliday:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        substitute:
+          type: boolean
     AgreementsRequest:
       type: object
       properties:
@@ -2376,6 +2761,40 @@ components:
         place:
           $ref: "#/components/schemas/PlaceSummary"
           description: 연결한 장소 (없거나 지워졌으면 null)
+    AppConfigResponse:
+      type: object
+      properties:
+        features:
+          type: object
+          additionalProperties:
+            type: boolean
+        latestVersion:
+          type: string
+        minSupportedVersion:
+          type: string
+        notice:
+          type: string
+          description: 점검·안내 공지 (없으면 null)
+        noticeUpdatedAt:
+          type: string
+          format: date-time
+          description: 공지를 바꾼 시각. 앱은 이 값으로 이미 본 공지인지 판단한다 (공지 없으면 null)
+        platform:
+          type: string
+    AppVersion:
+      type: object
+      properties:
+        latestVersion:
+          type: string
+        minSupportedVersion:
+          type: string
+        notice:
+          type: string
+        noticeUpdatedAt:
+          type: string
+          format: date-time
+        platform:
+          type: string
     ApprovePlace:
       type: object
       properties:
@@ -2418,6 +2837,32 @@ components:
           description: 조회한 후보의 version
       required:
       - version
+    AuditLogItem:
+      type: object
+      properties:
+        action:
+          type: string
+        actorId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        groupId:
+          type: integer
+          format: int64
+        id:
+          type: integer
+          format: int64
+        ip:
+          type: string
+        meta:
+          type: string
+        targetId:
+          type: integer
+          format: int64
+        targetType:
+          type: string
     AuthResponse:
       type: object
       properties:
@@ -2628,6 +3073,44 @@ components:
           minLength: 0
       required:
       - name
+    CreateReportRequest:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: 자세한 내용 (OTHER 면 필수)
+          maxLength: 500
+          minLength: 0
+        groupId:
+          type: integer
+          format: int64
+          description: "USER 신고에만: 신고하는 그룹"
+        reason:
+          type: string
+          enum:
+          - SPAM
+          - HARASSMENT
+          - SEXUAL
+          - VIOLENCE
+          - CHILD_SAFETY
+          - PRIVACY
+          - AI_INACCURATE
+          - OTHER
+        targetId:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        targetType:
+          type: string
+          enum:
+          - MESSAGE
+          - MEDIA
+          - AI_OUTPUT
+          - USER
+      required:
+      - reason
+      - targetId
+      - targetType
     CreateTodoRequest:
       type: object
       properties:
@@ -2762,6 +3245,15 @@ components:
           items:
             type: string
         text:
+          type: string
+    FeatureFlagItem:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        key:
+          type: string
+        source:
           type: string
     FieldError:
       properties:
@@ -3382,6 +3874,144 @@ components:
           - SYSTEM
           - CANDIDATE
           - POLL
+    ReportDetail:
+      type: object
+      properties:
+        content:
+          type: object
+          additionalProperties: {}
+        detail:
+          type: string
+        handlerNote:
+          type: string
+        report:
+          $ref: "#/components/schemas/ReportSummary"
+        reporterId:
+          type: integer
+          format: int64
+    ReportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportSummary"
+        nextCursor:
+          type: string
+    ReportResponse:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        id:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum:
+          - SPAM
+          - HARASSMENT
+          - SEXUAL
+          - VIOLENCE
+          - CHILD_SAFETY
+          - PRIVACY
+          - AI_INACCURATE
+          - OTHER
+        status:
+          type: string
+          enum:
+          - OPEN
+          - REVIEWED
+          - ACTIONED
+          - REJECTED
+        targetId:
+          type: integer
+          format: int64
+        targetType:
+          type: string
+          enum:
+          - MESSAGE
+          - MEDIA
+          - AI_OUTPUT
+          - USER
+    ReportSummary:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - HIDE_MESSAGE
+          - DISMISS_CANDIDATE
+        createdAt:
+          type: string
+          format: date-time
+        groupId:
+          type: integer
+          format: int64
+        handledAt:
+          type: string
+          format: date-time
+        id:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum:
+          - SPAM
+          - HARASSMENT
+          - SEXUAL
+          - VIOLENCE
+          - CHILD_SAFETY
+          - PRIVACY
+          - AI_INACCURATE
+          - OTHER
+        status:
+          type: string
+          enum:
+          - OPEN
+          - REVIEWED
+          - ACTIONED
+          - REJECTED
+        targetId:
+          type: integer
+          format: int64
+        targetType:
+          type: string
+          enum:
+          - MESSAGE
+          - MEDIA
+          - AI_OUTPUT
+          - USER
+    ResolveReportRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - HIDE_MESSAGE
+          - DISMISS_CANDIDATE
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        status:
+          type: string
+          enum:
+          - OPEN
+          - REVIEWED
+          - ACTIONED
+          - REJECTED
+      required:
+      - status
+    ResolveReportResponse:
+      type: object
+      properties:
+        report:
+          $ref: "#/components/schemas/ReportSummary"
+        resolvedCount:
+          type: integer
+          format: int32
     ScheduleRequest:
       type: object
       properties:
@@ -3739,6 +4369,24 @@ components:
         refreshTokenExpiresAt:
           type: string
           format: date-time
+    UpdateAppVersionRequest:
+      type: object
+      properties:
+        latestVersion:
+          type: string
+          maxLength: 20
+          minLength: 0
+        minSupportedVersion:
+          type: string
+          example: 1.0.0
+          maxLength: 20
+          minLength: 0
+        notice:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - minSupportedVersion
     UpdateConsentRequest:
       type: object
       properties:
@@ -3752,6 +4400,13 @@ components:
           minLength: 0
       required:
       - agreed
+    UpdateFeatureFlagRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required:
+      - enabled
     UpdateGroupSettingsRequest:
       type: object
       properties:

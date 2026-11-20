@@ -9,6 +9,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.famlog.admin.service.AdminProperties;
+import com.famlog.admin.web.AdminTokenFilter;
+import com.famlog.common.appversion.AppVersionFilter;
+import com.famlog.common.appversion.AppVersions;
 import com.famlog.common.error.ErrorResponseWriter;
 import com.famlog.common.ratelimit.RateLimitFilter;
 import com.famlog.common.ratelimit.RateLimitProperties;
@@ -33,6 +37,10 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
+            "/api/v1/app/config",
+            "/admin",
+            "/admin/",
+            "/admin/**",
             "/api/v1/auth/**",
             "/api/v1/app/config",
             // WebSocket 핸드셰이크. 인증은 STOMP CONNECT 프레임의 토큰으로 한다 (StompAuthInterceptor)
@@ -43,7 +51,8 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
             FamlogAuthenticationEntryPoint authenticationEntryPoint, FamlogAccessDeniedHandler accessDeniedHandler,
             RateLimitProperties rateLimitProperties, RateLimiter rateLimiter, GroupAccessChecker groupAccessChecker,
-            ErrorResponseWriter errorResponseWriter) throws Exception {
+            ErrorResponseWriter errorResponseWriter, AdminProperties adminProperties, AppVersions appVersions)
+            throws Exception {
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimitProperties, rateLimiter, errorResponseWriter);
         GroupPathAccessFilter groupPathAccessFilter = new GroupPathAccessFilter(groupAccessChecker,
                 errorResponseWriter);
@@ -66,7 +75,12 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
-                .addFilterAfter(groupPathAccessFilter, RateLimitFilter.class);
+                .addFilterAfter(groupPathAccessFilter, RateLimitFilter.class)
+                // 관리자 토큰(/admin/api), 강제 업데이트(426)는 사용자 인증 전에 본다
+                .addFilterBefore(new AdminTokenFilter(adminProperties, errorResponseWriter),
+                        BearerTokenAuthenticationFilter.class)
+                .addFilterBefore(new AppVersionFilter(appVersions, errorResponseWriter),
+                        BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 }

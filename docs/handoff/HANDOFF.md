@@ -121,6 +121,7 @@
 | 11/20 | S20 나누기: S20-1 AI 안내·동의 → S20-2 신고·관리자 도구(환경변수 관리자 토큰 + 정적 페이지) → S20-3 계정 삭제(그룹장은 넘긴 뒤, 미디어 삭제 선택, 웹은 정적 안내 + 개발자 이메일) → S20-4 내보내기(서버 ZIP, 7일 링크) → S20-5 운영 배치. 계약이 바뀔 때마다 모바일에 알린다 | 사용자 결정 |
 | 11/20 | AI 분석 동의는 고지 확인 방식(기본 분석, 개인 제외). 국외 이전도 같은 안내 버전으로 함께 기록. 동의 철회 = 모든 그룹 분석 제외 | 사용자 결정, 8.3 (법률 검토로 바뀔 수 있게 버전 관리) |
 | 11/20 | AI 안내 `refusal` 문구를 앱 실제 경로(채팅방 메뉴 > 그룹 설정)로 고침. 출시 전이라 version 1.0 유지, S22 보관 문구 확정 때 올린다 | 앱 요청, 사용자 결정 |
+| 11/20 | S20-2: 신고 사유 8종(OTHER는 상세 필수), 조치는 메시지·사진 숨김과 AI 후보 무시(사용자 정지는 v1.1), 처리 결과 알림 없음. 기능 플래그 3개(DB 값 없으면 설정값). 강제 업데이트 426을 지금 넣음(ANDROID 최소 0.0.0). 관리자 인증은 환경변수 토큰 + 정적 페이지. 공지에 `noticeUpdatedAt`(앱 요청) | 사용자 결정 |
 
 ## 3. Figma 상태
 
@@ -184,7 +185,8 @@
 | S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ PR #22 |
 | S19-1 | ARC-06 원문 보기 강조용 `source.candidateId` | ✅ PR #23 |
 | S19-2 | ARC-04·6.4 기존 일정 변경·할 일 완료 후보(`target_ref`), 프롬프트 extract_v2, 평가셋 60건 | ✅ PR #24 |
-| S20-1 | SET-01 AI 분석 안내·동의(고지 확인), 철회 시 전체 분석 제외, 관리자의 분석 제외 보기 | ✅ 이번 PR |
+| S20-1 | SET-01 AI 분석 안내·동의(고지 확인), 철회 시 전체 분석 제외, 관리자의 분석 제외 보기 | ✅ PR #25·#26 |
+| S20-2 | MOD-01 신고 API, 최소 관리자 도구(신고·공휴일·앱 버전·기능 플래그·감사 로그), /app/config·426 | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -428,6 +430,23 @@
   - 시스템 메시지(`CANDIDATE_APPROVED`): "엄마님이 '영화 보기' 일정을 12:00으로 바꿨어요." / "…'11월 15일(일)로'…" / "엄마님이 '세제 사 오기' 할 일을 완료했어요."
 - 되돌리기(5분): 일정은 바꾸기 전 시각으로(그사이 또 고쳤으면 409 `CANDIDATE_TARGET_CHANGED`), 할 일은 다시 연다. 시스템 메시지는 지운다
 
+### 신고·관리자 도구·앱 설정 (S20-2, 앱 S20 참고)
+
+**신고** `POST /reports {targetType, targetId, groupId?, reason, detail?}` → 201 `{id, targetType, targetId, reason, status: OPEN, createdAt}`
+- targetType: `MESSAGE`(사람이 보낸 메시지, 시스템 메시지는 400) · `MEDIA` · `AI_OUTPUT`(후보 id) · `USER`(groupId 필수, 나 자신은 400)
+- reason: `SPAM`, `HARASSMENT`, `SEXUAL`, `VIOLENCE`, `CHILD_SAFETY`, `PRIVACY`, `AI_INACCURATE`, `OTHER`(detail 필수). detail 500자
+- 내가 볼 수 없는 대상(다른 그룹·들어오기 전)은 404, 구성원이 아닌 그룹은 403. 처리 전 같은 대상을 다시 신고하면 그 신고를 그대로 돌려준다
+- 처리 결과 알림은 없다 → 앱은 "신고가 접수됐어요"만
+
+**앱 설정** `GET /app/config` (로그인 없음, `X-Platform` 기본 ANDROID) → `{platform, minSupportedVersion, latestVersion, notice, noticeUpdatedAt, features: {nearby, photoLocation, aiAnalysis}}`
+- 앱이 보낸 `X-App-Version`이 minSupportedVersion보다 낮으면 다른 API 전부 426 `UPGRADE_REQUIRED` (헤더가 없으면 통과, /app/config는 언제나 통과). 처음 값은 ANDROID 0.0.0 (강제 없음)
+- latestVersion이 더 높으면 선택 업데이트 안내, notice가 있으면 공지 표시. `noticeUpdatedAt`은 공지 문구가 바뀔 때만 새로 정해진다(같은 문구 저장은 그대로, 지우면 null) → 앱은 이 값으로 이미 본 공지를 다시 띄우지 않는다
+- 버전 비교: 점으로 나눈 숫자를 자리별로, 빠진 자리는 0("1.0" = "1.0.0"), 꼬리(-beta)는 무시, 숫자가 아닌 값은 검사하지 않음
+
+**관리자 도구** (서버 운영, 앱 계약 아님) `/admin/` 페이지 + `/admin/api/**` (`X-Admin-Token` = 환경변수 `FAMLOG_ADMIN_TOKEN`, 비어 있으면 404·틀리면 401)
+- 신고 목록(아동 안전 먼저, 콘텐츠 없음) → 상세(신고된 대상 하나만, 열람마다 `ADMIN_REPORT_VIEWED`) → 처리 REVIEWED·ACTIONED·REJECTED. 조치: 메시지·사진 `HIDE_MESSAGE`(모두에게서 삭제 처리, `message.deleted`), AI 후보 `DISMISS_CANDIDATE`(대기 중이면 무시, `candidate.resolved` decidedBy null). 같은 대상의 처리 전 신고는 함께 처리
+- 공휴일 추가·삭제, 앱 버전, 기능 플래그(`place.nearby`, `media.photo-location`, `ai.analysis` — DB 값이 없으면 설정값), 감사 로그 최근 기록. 관리자 동작은 모두 `audit_logs`(actor 없음, ip)
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
@@ -439,9 +458,9 @@
 - 프롬프트·모델을 바꾸면 `worker/evals/README.md` 순서로 평가하고 기록 표에 남긴다 (실제 호출은 사용자 확인 후)
 - 다음(S20~): 변경 후보의 제목·참석자·장소 변경과 승인 전 값 고치기(v1.1), 근거만 늘어난 후보의 이벤트, 후보 [신고](MOD-01), 참석자·담당자 개별 푸시, 기념일 1주 전 알림·음력(v1.1), 만료 후보 정리 배치
 - S20-5: 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리 (AI 안내·동의·관리자 분석 제외 보기는 S20-1에서 완료)
-- S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
+- S20-5: 오래된 `location_access_logs` 보관 기간, 처리 후 1년 지난 `reports` 정리 (`feature_flags`·관리자 화면은 S20-2에서 완료)
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인
-- S20: 공휴일 자동 갱신(공공데이터포털 특일 정보)·관리자 수정, 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지
+- S20-5~: 공휴일 자동 갱신(공공데이터포털 특일 정보, 관리자 추가·삭제는 S20-2에서 완료), 지난 `schedule_reminder_sends` 정리, 할 일 완료 알림을 그룹 설정으로 둘지
 - v1.1: 반복 일정 "이번 회차만" 수정·삭제, 음력 반복(DIF-04), 장보기 목록(TODO-02)
 - 매년: 다음 해 공휴일 마이그레이션 (2028년분은 2027년 하반기에, 우주항공청 월력요항 기준)
 - S20: 삭제 예정 그룹·탈퇴 계정 파기 배치, 삭제 유예 계정 복구, 만료된 `refresh_tokens` 정리
