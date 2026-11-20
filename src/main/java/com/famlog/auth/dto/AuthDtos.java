@@ -35,7 +35,8 @@ public final class AuthDtos {
 
     public record LoginRequest(
             @Schema(description = "카카오: 액세스 토큰 / Google: ID 토큰") @NotBlank @Size(max = 4096) String providerToken,
-            @Valid @NotNull DeviceRequest device) {
+            @Valid @NotNull DeviceRequest device,
+            @Schema(description = "삭제 예정 계정을 복구하고 로그인 (403 ACCOUNT_PENDING_DELETION 을 받은 뒤)") Boolean restore) {
 
         @Override
         public String toString() {

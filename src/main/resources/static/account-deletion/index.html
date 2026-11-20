@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>팸로그 계정 삭제</title>
+<meta name="description" content="팸로그(FamLog) 계정과 데이터 삭제를 요청하는 방법">
+<!-- 웹 계정 삭제 안내 (사양서 03장 WEB-01, 4.1 ACC-01, 8.9). Google Play 데이터 삭제 요구 사항의 웹 경로 -->
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #2f6fde; --card: #f6f8fa; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #30363d; --accent: #6ea8fe; --card: #161b22; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.7 system-ui, -apple-system, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  ol, ul { padding-left: 22px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
+  a { color: var(--accent); }
+  code { font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>팸로그 계정 삭제</h1>
+  <p class="muted">팸로그(FamLog) 계정과 개인정보 삭제를 요청하는 방법이에요.</p>
+
+  <h2>앱에서 삭제하기</h2>
+  <ol>
+    <li>팸로그 앱에서 <strong>설정 &gt; 개인정보·보안 &gt; 계정 삭제</strong>로 들어가요.</li>
+    <li>내가 올린 사진·동영상도 지울지 고른 뒤 삭제를 요청해요.</li>
+    <li>가족 그룹의 그룹장이고 다른 가족이 있다면, 먼저 그룹장을 다른 가족에게 넘겨야 해요.</li>
+  </ol>
+
+  <h2>앱을 쓸 수 없을 때</h2>
+  <div class="card">
+    <p><a href="mailto:kimyunseo112@gmail.com?subject=%ED%8C%B8%EB%A1%9C%EA%B7%B8%20%EA%B3%84%EC%A0%95%20%EC%82%AD%EC%A0%9C%20%EC%9A%94%EC%B2%AD">kimyunseo112@gmail.com</a>
+      으로 메일을 보내 주세요. 제목은 "팸로그 계정 삭제 요청"으로 써 주세요.</p>
+    <p>본문에 아래 내용을 적어 주세요.</p>
+    <ul>
+      <li>가입할 때 쓴 로그인 방법 (카카오 또는 Google)</li>
+      <li>앱에서 쓰던 닉네임과 가족 그룹 이름</li>
+      <li>내가 올린 사진·동영상도 지울지 여부</li>
+    </ul>
+    <p class="muted">본인 확인을 위해 추가로 여쭤볼 수 있어요. 확인되면 앱에서 삭제한 것과 같은 방법으로 처리하고 메일로 알려 드려요.
+      10일 안에 답변해요.</p>
+  </div>
+
+  <h2>삭제를 요청하면</h2>
+  <ul>
+    <li>모든 기기에서 바로 로그아웃되고 앱을 쓸 수 없어요.</li>
+    <li><strong>30일 동안</strong> 삭제를 미뤄요. 이 기간에 다시 로그인하면 계정을 복구할 수 있어요.</li>
+    <li>30일이 지나면 아래 정보를 지워요.</li>
+  </ul>
+
+  <h2>지우는 정보</h2>
+  <ul>
+    <li>닉네임, 프로필 사진, 출생연도·월, 소셜 로그인 연결</li>
+    <li>로그인 기기 정보와 알림 토큰, 알림 설정</li>
+    <li>가족 그룹에서의 역할·호칭 (모든 가족 그룹에서 나가요)</li>
+    <li>내가 올린 사진의 위치 정보</li>
+    <li>고른 경우, 내가 올린 사진·동영상 (그 메시지는 "삭제된 메시지"로 보여요)</li>
+  </ul>
+
+  <h2>남는 정보</h2>
+  <ul>
+    <li>가족 채팅방에 보낸 메시지, 함께 등록한 일정·장소: 가족의 기록이라 남지만, 작성자는 "탈퇴한 구성원"으로 보여요.</li>
+    <li>사진·동영상을 지우지 않기로 했다면 가족 앨범에 남아요.</li>
+    <li>법령에 따라 보관해야 하는 기록 (동의 이력, 접속 기록 3개월, 위치정보 이용 확인 자료 등)은 정해진 기간 동안 따로 보관한 뒤 지워요.</li>
+    <li>백업에 남은 데이터는 백업 보관 기간(7일)이 지나면 함께 지워져요.</li>
+  </ul>
+
+  <h2>문의</h2>
+  <p>개인정보 보호책임자: 팸로그 개발자 ·
+    <a href="mailto:kimyunseo112@gmail.com">kimyunseo112@gmail.com</a></p>
+</main>
+</body>
+</html>

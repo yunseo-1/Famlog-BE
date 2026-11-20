@@ -2,6 +2,7 @@ package com.famlog.group.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -232,6 +233,9 @@ public class GroupService {
             if (actorRole != GroupRole.OWNER) {
                 throw new BusinessException(ErrorCode.GROUP_ROLE_REQUIRED, "그룹장만 그룹장을 넘길 수 있어요.");
             }
+            if (!userRepository.findById(targetUserId).map(User::isActive).orElse(false)) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, "삭제 예정인 계정에는 그룹장을 넘길 수 없어요.");
+            }
             GroupMember actor = activeMember(groupId, actorId);
             actor.changeRole(GroupRole.ADMIN);
             // 그룹당 OWNER 하나(부분 유니크 인덱스)라서 이전 OWNER를 먼저 반영한다
@@ -285,6 +289,94 @@ public class GroupService {
         }
         removeMember(member);
         events.publishEvent(new MemberLeft(groupId, userId, false));
+    }
+
+    // --- ACC-01 계정 삭제 ---
+
+    /**
+     * 계정 삭제 요청 전 그룹 정리: 다른 구성원이 있는 그룹의 그룹장이면 409(먼저 넘기기), 혼자인 그룹은 삭제 예정으로 돌린다.
+     * 구성원 자격은 유예 동안 그대로 둔다 (복구하면 그대로 돌아온다)
+     *
+     * @return 삭제 예정으로 돌린 그룹 id
+     */
+    @Transactional
+    public List<Long> prepareAccountDeletion(long userId) {
+        List<GroupMember> memberships = memberRepository.findByUserIdAndLeftAtIsNull(userId);
+        List<String> blocking = new ArrayList<>();
+        List<Long> solo = new ArrayList<>();
+        for (GroupMember member : memberships) {
+            if (member.getRole() != GroupRole.OWNER) {
+                continue;
+            }
+            if (memberRepository.countByGroupIdAndLeftAtIsNull(member.getGroupId()) > 1) {
+                blocking.add(groupRepository.findById(member.getGroupId()).orElseThrow().getName());
+            } else {
+                solo.add(member.getGroupId());
+            }
+        }
+        if (!blocking.isEmpty()) {
+            throw new BusinessException(ErrorCode.OWNER_TRANSFER_REQUIRED, blocking.stream()
+                    .map(name -> "'" + name + "'").collect(Collectors.joining(", "))
+                    + " 그룹의 그룹장을 다른 가족에게 넘긴 뒤 계정을 삭제할 수 있어요.");
+        }
+        solo.forEach(groupId -> scheduleDeletion(lockGroup(groupId), userId, "ACCOUNT_DELETED"));
+        return solo;
+    }
+
+    /** 계정 복구: 함께 삭제 예정으로 돌렸던 그룹을 되살린다 (유예 기간 안이고 아직 삭제 예정이면) */
+    @Transactional
+    public void restoreAfterAccountRestore(List<Long> groupIds) {
+        Instant now = Instant.now(clock);
+        for (long groupId : groupIds) {
+            groupRepository.findById(groupId).ifPresent(group -> {
+                if (group.restoreIfScheduled(now)) {
+                    groupRepository.saveAndFlush(group);
+                }
+            });
+        }
+    }
+
+    /** 계정 파기: 모든 그룹에서 나가고 역할·호칭을 지운다. 남은 가족에게 "나갔어요" 메시지 */
+    @Transactional
+    public int leaveAllForPurge(long userId) {
+        memberRepository.findByUserIdAndLeftAtIsNull(userId).stream()
+                .filter(member -> member.getRole() == GroupRole.OWNER)
+                .forEach(owner -> handOverOwnership(owner, userId));
+        // 그룹 삭제 예정 처리가 영속성 컨텍스트를 비울 수 있어 다시 읽는다
+        List<GroupMember> memberships = memberRepository.findByUserIdAndLeftAtIsNull(userId);
+        Instant now = Instant.now(clock);
+        for (GroupMember member : memberships) {
+            member.leave(now);
+            // 시스템 메시지는 지우기 전 호칭으로 남긴다 (리스너가 같은 트랜잭션에서 바로 쓴다)
+            events.publishEvent(new MemberLeft(member.getGroupId(), userId, false));
+            member.clearProfile();
+        }
+        memberRepository.flush();
+        return memberships.size();
+    }
+
+    /**
+     * 파기되는 그룹장의 그룹 (요청할 때 막지만 유예 중 위임받은 경우 등): 먼저 들어온 활성 계정 구성원(ADMIN 먼저)에게 넘기고,
+     * 넘길 사람이 없으면 그룹을 삭제 예정으로 돌린다
+     */
+    private void handOverOwnership(GroupMember owner, long userId) {
+        FamilyGroup group = lockGroup(owner.getGroupId());
+        List<GroupMember> others = memberRepository.findByGroupIdAndLeftAtIsNullOrderByJoinedAtAsc(group.getId())
+                .stream().filter(m -> m.getUserId() != userId)
+                .filter(m -> userRepository.findById(m.getUserId()).map(User::isActive).orElse(false))
+                .sorted(java.util.Comparator.comparing((GroupMember m) -> m.getRole() != GroupRole.ADMIN))
+                .toList();
+        if (others.isEmpty()) {
+            scheduleDeletion(group, userId, "ACCOUNT_PURGED");
+            return;
+        }
+        owner.changeRole(GroupRole.ADMIN);
+        memberRepository.saveAndFlush(owner);
+        GroupMember next = others.get(0);
+        next.changeRole(GroupRole.OWNER);
+        memberRepository.saveAndFlush(next);
+        auditLogger.record(userId, AuditAction.GROUP_OWNER_TRANSFERRED, "USER", next.getUserId(), group.getId(),
+                Map.of("from", userId, "to", next.getUserId(), "reason", "ACCOUNT_PURGED"));
     }
 
     private void removeMember(GroupMember member) {

@@ -319,6 +319,35 @@ paths:
       summary: 신고 처리
       tags:
       - admin
+  /admin/api/users/{userId}/deletion:
+    post:
+      description: "웹 안내 페이지(/account-deletion)로 이메일 요청이 왔을 때, 본인 확인 뒤 앱의 계정 삭제와 같\
+        은 흐름으로 처리한다 (30일 유예, 그룹장 규칙 409)"
+      operationId: deleteAccount
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminDeleteAccountRequest"
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 계정 삭제 대신 처리
+      tags:
+      - admin
   /api/v1/ai-notice:
     get:
       description: "무엇이 어디로 전송되는지와 국외 이전 고지. 그룹 AI 분석을 켤 때(관리자)와 그룹 설정의 aiNoticePending=true\
@@ -2372,6 +2401,29 @@ paths:
       summary: 할 일 수정·완료
       tags:
       - todo-controller
+  /api/v1/users/me:
+    delete:
+      description: "즉시 모든 기기에서 로그아웃되고 30일 뒤 개인정보를 파기한다. 그동안 로그인하면 복구할 수 있다(로그인 403\
+        \ ACCOUNT_PENDING_DELETION → restore:true). 다른 구성원이 있는 그룹의 그룹장이면 409 OWNER_TRANSFER_REQUIRED(먼\
+        저 넘기기), 혼자인 그룹은 함께 삭제 예정. 다시 요청해도 204"
+      operationId: deleteAccount_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteAccountRequest"
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 계정 삭제 요청
+      tags:
+      - account-controller
   /api/v1/users/me/consents:
     get:
       description: 종류 5개 모두. reconsentRequired=true 면 문서가 바뀌어 다시 받아야 한다
@@ -2683,6 +2735,11 @@ components:
       required:
       - date
       - name
+    AdminDeleteAccountRequest:
+      type: object
+      properties:
+        deleteMedia:
+          type: boolean
     AdminHoliday:
       type: object
       properties:
@@ -3149,6 +3206,12 @@ components:
       properties:
         candidate:
           $ref: "#/components/schemas/CandidateResponse"
+    DeleteAccountRequest:
+      type: object
+      properties:
+        deleteMedia:
+          type: boolean
+          description: 내가 올린 사진·동영상도 지우기 (기본 false)
     DeviceRequest:
       type: object
       properties:
@@ -3199,6 +3262,7 @@ components:
           - LOCATION_CONSENT_REQUIRED
           - MESSAGE_NOT_DELETABLE
           - CANDIDATE_NOT_UNDOABLE
+          - ACCOUNT_PENDING_DELETION
           - AGE_RESTRICTED
           - NOT_FOUND
           - USER_NOT_REGISTERED
@@ -3409,6 +3473,9 @@ components:
           description: "카카오: 액세스 토큰 / Google: ID 토큰"
           maxLength: 4096
           minLength: 0
+        restore:
+          type: boolean
+          description: 삭제 예정 계정을 복구하고 로그인 (403 ACCOUNT_PENDING_DELETION 을 받은 뒤)
       required:
       - device
       - providerToken

@@ -13,6 +13,7 @@ import com.famlog.auth.social.SocialIdentity;
 import com.famlog.auth.social.SocialLoginVerifier;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.user.service.AccountDeletionService;
 import com.famlog.user.domain.Consent;
 import com.famlog.user.domain.ConsentType;
 import com.famlog.user.domain.SocialAccount;
@@ -47,17 +48,25 @@ public class AuthService {
     private final AgePolicy agePolicy;
     private final ConsentProperties consentProperties;
     private final ApplicationEventPublisher events;
+    private final AccountDeletionService accountDeletionService;
     private final Clock clock;
 
     @Transactional
     public AuthResult login(SocialProvider provider, String providerToken, DeviceInfo device) {
+        return login(provider, providerToken, device, false);
+    }
+
+    /** @param restore 삭제 예정 계정이면 복구하고 로그인한다 (ACC-01). 아니면 403 ACCOUNT_PENDING_DELETION */
+    @Transactional
+    public AuthResult login(SocialProvider provider, String providerToken, DeviceInfo device, boolean restore) {
         SocialIdentity identity = socialLoginVerifier.verify(provider, providerToken);
         SocialAccount account = socialAccountRepository
                 .findByProviderAndProviderUserId(identity.provider(), identity.providerUserId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_REGISTERED));
         User user = userRepository.findById(account.getUserId()).orElseThrow();
-        if (!user.isActive()) {
-            // 삭제 유예 중 복구는 ACC-01(S20)에서 만든다
+        if (user.isPendingDeletion()) {
+            accountDeletionService.restoreOrReject(user, restore);
+        } else if (!user.isActive()) {
             throw new BusinessException(ErrorCode.AUTH_INVALID);
         }
         boolean newDevice = !sessionTokenService.hasUsedDevice(user.getId(), device.deviceId());

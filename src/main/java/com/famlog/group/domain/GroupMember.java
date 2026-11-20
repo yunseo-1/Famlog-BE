@@ -92,6 +92,12 @@ public class GroupMember extends BaseTimeEntity {
         this.leftAt = null;
     }
 
+    /** 계정 파기 (사양서 8.2 "가족 역할·호칭은 그룹 탈퇴 시 파기") */
+    public void clearProfile() {
+        this.familyRole = null;
+        this.familyTitle = null;
+    }
+
     public void leave(Instant now) {
         if (leftAt == null) {
             leftAt = now;

@@ -54,6 +54,16 @@ public class FamilyGroup extends BaseTimeEntity {
         return status == GroupStatus.ACTIVE;
     }
 
+    /** 삭제 예정을 거둔다 (계정 삭제를 복구할 때, 유예 기간 안이면) */
+    public boolean restoreIfScheduled(Instant now) {
+        if (status == GroupStatus.PENDING_DELETION && deleteScheduledAt != null && deleteScheduledAt.isAfter(now)) {
+            status = GroupStatus.ACTIVE;
+            deleteScheduledAt = null;
+            return true;
+        }
+        return false;
+    }
+
     /** 즉시 접근을 막고 유예 기간 뒤 파기 대상이 된다 (사양서 2.2) */
     public void scheduleDeletion(Instant now, Duration grace) {
         if (status == GroupStatus.ACTIVE) {

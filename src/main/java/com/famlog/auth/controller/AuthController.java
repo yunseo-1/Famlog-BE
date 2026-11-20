@@ -37,7 +37,7 @@ public class AuthController {
     @PostMapping("/{provider}/login")
     AuthResponse login(@PathVariable String provider, @Valid @RequestBody LoginRequest request) {
         return AuthResponse.from(authService.login(parseProvider(provider), request.providerToken(),
-                request.device().toDeviceInfo()));
+                request.device().toDeviceInfo(), Boolean.TRUE.equals(request.restore())));
     }
 
     @Operation(summary = "소셜 가입", description = "약관 동의 + 닉네임 + 출생연도월. 만 14세 미만이면 403 AGE_RESTRICTED")

@@ -28,6 +28,8 @@ import com.famlog.admin.service.AdminReportService;
 import com.famlog.admin.service.AdminSettingsService;
 import com.famlog.common.appversion.AppVersions.AppVersion;
 import com.famlog.report.domain.ReportStatus;
+import com.famlog.user.domain.AccountDeletionRequest;
+import com.famlog.user.service.AccountDeletionService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,6 +45,7 @@ public class AdminController {
 
     private final AdminReportService reportService;
     private final AdminSettingsService settingsService;
+    private final AccountDeletionService accountDeletionService;
 
     @Operation(summary = "신고 목록", description = "아동 안전 먼저, 그다음 최신 순. 콘텐츠는 넣지 않는다")
     @GetMapping("/reports")
@@ -100,6 +103,19 @@ public class AdminController {
     @PutMapping("/feature-flags/{key}")
     FeatureFlagItem updateFeatureFlag(@PathVariable String key, @Valid @RequestBody UpdateFeatureFlagRequest request) {
         return settingsService.updateFeatureFlag(key, request.enabled());
+    }
+
+    /** @param deleteMedia 내가 올린 사진·동영상도 지운다 */
+    public record AdminDeleteAccountRequest(Boolean deleteMedia) {
+    }
+
+    @Operation(summary = "계정 삭제 대신 처리", description = "웹 안내 페이지(/account-deletion)로 이메일 요청이 왔을 때, 본인 확인 뒤 "
+            + "앱의 계정 삭제와 같은 흐름으로 처리한다 (30일 유예, 그룹장 규칙 409)")
+    @PostMapping("/users/{userId}/deletion")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteAccount(@PathVariable long userId, @RequestBody(required = false) AdminDeleteAccountRequest request) {
+        accountDeletionService.request(userId, request != null && Boolean.TRUE.equals(request.deleteMedia()),
+                AccountDeletionRequest.SOURCE_ADMIN);
     }
 
     @GetMapping("/audit-logs")

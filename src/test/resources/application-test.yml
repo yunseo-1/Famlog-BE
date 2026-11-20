@@ -11,6 +11,8 @@ logging:
 famlog:
   admin:
     token: test-admin-token
+  account:
+    purge-enabled: false
   schedule:
     reminder-enabled: false
   ai:
