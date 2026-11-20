@@ -4,8 +4,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -48,6 +53,7 @@ import com.famlog.group.service.GroupAccessChecker;
 import com.famlog.place.domain.Place;
 import com.famlog.place.service.PlaceSearchService;
 import com.famlog.place.service.PlaceService;
+import com.famlog.schedule.domain.Schedule;
 import com.famlog.schedule.dto.ScheduleDtos.ScheduleRequest;
 import com.famlog.schedule.service.ScheduleService;
 import com.famlog.todo.dto.TodoDtos.CreateTodoRequest;
@@ -56,6 +62,7 @@ import com.famlog.user.domain.User;
 import com.famlog.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -68,6 +75,8 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>같은 사람이 이미 처리한 후보를 다시 처리하면 그 결과를 그대로 돌려준다 (재시도 안전)</li>
  * <li>되돌리기: 승인한 사람이나 ADMIN 이상이 5분 안에. 만든 항목과 시스템 메시지를 지운다
  * (이미 공유된 장소에 연결했으면 연결만 푼다)</li>
+ * <li>기존 항목 변경·완료 후보(target_ref, S19-2): 새로 만들지 않고 그 일정의 날짜·시각을 바꾸거나 할 일을 완료한다.
+ * 되돌리면 바꾸기 전 값으로 돌리거나 다시 연다</li>
  * </ul>
  */
 @Service
@@ -104,6 +113,9 @@ public class CandidateDecisionService {
         Instant now = Instant.now(clock);
         requireOpen(candidate, request.version(), now);
 
+        if (candidate.hasTarget()) {
+            return applyTarget(candidate, userId, request, now);
+        }
         List<EvidenceRow> rows = evidence.evidence(candidateId);
         Long senderId = rows.isEmpty() ? null : rows.getLast().senderId();
         List<Long> members = sourceReader.members(candidate.getGroupId()).stream()
@@ -164,13 +176,136 @@ public class CandidateDecisionService {
         if (!allowed || !Instant.now(clock).isBefore(candidate.getDecidedAt().plus(UNDO_WINDOW))) {
             throw new BusinessException(ErrorCode.CANDIDATE_NOT_UNDOABLE);
         }
-        removeCreated(candidate, userId);
+        if (candidate.hasTarget()) {
+            restoreTarget(candidate, userId);
+        } else {
+            removeCreated(candidate, userId);
+        }
         candidate.undo();
         candidateRepository.saveAndFlush(candidate);
         feedbackRepository.save(new SuggestionFeedback(candidateId, userId, FeedbackAction.UNDONE, List.of(), null));
         events.publishEvent(new CandidateUndone(candidate.getGroupId(), candidateId));
         resolved(candidate);
         return response(candidate);
+    }
+
+    /**
+     * 기존 항목 변경·완료 후보 승인 (S19-2). 대상이 여럿이면 targetId 로 고른다(없으면 422). 일정은 날짜·시각만 바꾸고
+     * (수정 권한이 없으면 403), 할 일은 완료로 바꾼다. 그사이 대상이 바뀌었거나 지워졌으면 409 CANDIDATE_TARGET_CHANGED.
+     * 바꾼 대상과 바꾼 뒤 version 을 target_ref 에 남긴다 (되돌리기용). 원문 연결(item_sources)은 만들지 않는다
+     */
+    private DecisionResponse applyTarget(RegistrationCandidate candidate, long userId, ApproveRequest request,
+            Instant now) {
+        requireOnly(request.schedule() == null && request.todo() == null && request.place() == null);
+        Map<String, Object> target = targetOf(candidate);
+        Long chosen = request.targetId() != null ? request.targetId() : asLong(target.get("entityId"));
+        if (chosen == null) {
+            throw missing(List.of(CandidateTargets.MISSING_TARGET));
+        }
+        Map<String, Object> choice = choices(target).stream()
+                .filter(c -> chosen.equals(asLong(c.get("entityId")))).findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED, "고를 수 있는 항목이 아니에요."));
+        List<String> edited = target.get("entityId") == null ? List.of(CandidateTargets.MISSING_TARGET) : List.of();
+        String entityType = (String) target.get("entityType");
+        String what;
+        Map<String, Object> applied = new LinkedHashMap<>();
+        try {
+            if (CandidateTargets.CHANGE.equals(target.get("action"))) {
+                Schedule.Timing before = timing(choice.get("before"));
+                Schedule.Timing after = timing(choice.get("after"));
+                ScheduleService.Retimed retimed = scheduleService.retime(chosen, userId, before, after, null);
+                applied.put("version", retimed.version());
+                what = "님이 '" + retimed.title() + "' 일정을 " + changeText(before, after) + " 바꿨어요.";
+            } else {
+                what = "님이 '" + todoService.completeFromCandidate(chosen, userId) + "' 할 일을 완료했어요.";
+            }
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.NOT_FOUND) {
+                throw new BusinessException(ErrorCode.CANDIDATE_TARGET_CHANGED);
+            }
+            throw e;
+        }
+        target.put("entityId", chosen);
+        target.put("title", choice.get("title"));
+        if (choice.containsKey("createdBy")) {
+            target.put("createdBy", choice.get("createdBy"));
+        }
+        target.put("before", choice.get("before"));
+        if (choice.containsKey("after")) {
+            target.put("after", choice.get("after"));
+        }
+        target.put(CandidateMapper.APPLIED, applied);
+        candidate.recordTarget(jsonMapper.writeValueAsString(target));
+        candidate.approve(userId, now, entityType, chosen);
+        candidateRepository.saveAndFlush(candidate);
+        feedbackRepository.save(new SuggestionFeedback(candidate.getId(), userId,
+                edited.isEmpty() ? FeedbackAction.APPROVED : FeedbackAction.EDITED, edited, null));
+        events.publishEvent(new CandidateApproved(candidate.getGroupId(), candidate.getId(), userId, what,
+                entityType, chosen));
+        resolved(candidate);
+        return response(candidate);
+    }
+
+    /** 변경 후보는 바꾸기 전 시각으로 돌린다 (그사이 일정이 또 바뀌었으면 409). 완료 후보는 할 일을 다시 연다. 지워졌으면 할 것이 없다 */
+    private void restoreTarget(RegistrationCandidate candidate, long userId) {
+        Map<String, Object> target = targetOf(candidate);
+        long id = candidate.getCreatedEntityId();
+        try {
+            if (CandidateTargets.CHANGE.equals(target.get("action"))) {
+                Object version = ((Map<?, ?>) target.get(CandidateMapper.APPLIED)).get("version");
+                scheduleService.retime(id, userId, timing(target.get("after")), timing(target.get("before")),
+                        asLong(version));
+            } else {
+                todoService.reopenFromCandidate(id, userId);
+            }
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != ErrorCode.NOT_FOUND) {
+                throw e;
+            }
+        }
+    }
+
+    private Map<String, Object> targetOf(RegistrationCandidate candidate) {
+        return jsonMapper.readValue(candidate.getTargetRef(), new TypeReference<LinkedHashMap<String, Object>>() {
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> choices(Map<String, Object> target) {
+        return (List<Map<String, Object>>) target.getOrDefault("choices", List.of());
+    }
+
+    private static Schedule.Timing timing(Object value) {
+        Map<?, ?> map = (Map<?, ?>) value;
+        return new Schedule.Timing(Instant.parse((String) map.get("startsAt")),
+                Instant.parse((String) map.get("endsAt")), Boolean.TRUE.equals(map.get("allDay")));
+    }
+
+    /** "12:00으로", "11월 15일(일)로", "11월 15일(일) 12:00으로" */
+    static String changeText(Schedule.Timing before, Schedule.Timing after) {
+        ZonedDateTime from = before.startsAt().atZone(FamlogTime.DISPLAY_ZONE);
+        ZonedDateTime to = after.startsAt().atZone(FamlogTime.DISPLAY_ZONE);
+        boolean dateChanged = !from.toLocalDate().equals(to.toLocalDate());
+        String date = "%d월 %d일(%s)".formatted(to.getMonthValue(), to.getDayOfMonth(),
+                to.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN));
+        String time = "%02d:%02d".formatted(to.getHour(), to.getMinute());
+        String text = after.allDay() ? date : dateChanged ? date + " " + time : time;
+        return text + particle(text);
+    }
+
+    /** 받침이 있으면(ㄹ 제외) "으로", 없으면 "로". 숫자는 읽는 소리로 (0 영·3 삼·6 육 → 으로). 괄호는 앞 글자로 본다 */
+    private static String particle(String text) {
+        char last = text.charAt(text.length() - 1) == ')' ? text.charAt(text.length() - 2) : text.charAt(
+                text.length() - 1);
+        if (Character.isDigit(last)) {
+            return "036".indexOf(last) >= 0 ? "으로" : "로";
+        }
+        int jong = last >= 0xAC00 && last <= 0xD7A3 ? (last - 0xAC00) % 28 : 0;
+        return jong == 0 || jong == 8 ? "로" : "으로";
+    }
+
+    private static Long asLong(Object value) {
+        return value instanceof Number number ? number.longValue() : null;
     }
 
     /** 승인으로 만든 것 (sourceType 은 item_sources 의 종류, entityType 은 후보에 남기는 값) */

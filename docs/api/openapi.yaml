@@ -2360,6 +2360,10 @@ components:
           $ref: "#/components/schemas/ApprovePlace"
         schedule:
           $ref: "#/components/schemas/ScheduleRequest"
+        targetId:
+          type: integer
+          format: int64
+          description: "변경·완료 후보: target.choices 중 고른 entityId"
         todo:
           $ref: "#/components/schemas/CreateTodoRequest"
         version:
@@ -2464,6 +2468,11 @@ components:
           enum:
           - CARD
           - INBOX
+        target:
+          type: object
+          additionalProperties: {}
+          description: 기존 일정 변경·할 일 완료 후보의 대상 (HANDOFF 후보 API 규칙 S19-2). 새 항목 후보는
+            null
         type:
           type: string
           enum:
@@ -2668,6 +2677,7 @@ components:
           - CANDIDATE_ALREADY_DECIDED
           - VERSION_CONFLICT
           - CANDIDATE_EXPIRED
+          - CANDIDATE_TARGET_CHANGED
           - GROUP_LIMIT_EXCEEDED
           - OWNER_TRANSFER_REQUIRED
           - PLACE_ALREADY_SHARED

@@ -25,6 +25,7 @@ import com.famlog.candidate.repository.CandidateEvidenceWriter;
 import com.famlog.candidate.repository.CandidateEvidenceWriter.Anchor;
 import com.famlog.candidate.repository.CandidateEvidenceWriter.EvidenceMessage;
 import com.famlog.candidate.repository.RegistrationCandidateRepository;
+import com.famlog.candidate.repository.TargetItemReader;
 import com.famlog.candidate.service.CandidateBuilder.Built;
 import com.famlog.chat.dto.ChatDtos.ChatEvent;
 import com.famlog.chat.relay.ChatRelay;
@@ -43,6 +44,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>근거 메시지가 이 요청의 분석 구간(같은 방, (from_seq, to_seq])에 있고 지워지지 않았어야 한다. 아니면 그 후보를 버린다</li>
  * <li>중복: 같은 dedupKey 의 가장 최근 후보가 PENDING(만료 전)·APPROVED 면 근거만 붙이고, DISMISSED 면 만들지 않는다.
  * EXPIRED·UNDONE·만료된 PENDING 이면 새로 만든다</li>
+ * <li>기존 일정 변경·할 일 완료 표현은 그룹의 기존 항목에서 대상을 찾아 target_ref 를 단다. 못 찾으면 버린다 (CandidateTargets)</li>
  * <li>같은 그룹의 저장은 한 번에 하나씩 (DB advisory lock)</li>
  * <li>새로 만든 후보는 커밋 뒤 그룹에 candidate.created 로 알린다 (카드는 마지막 근거 메시지 아래)</li>
  * </ul>
@@ -57,6 +59,7 @@ public class CandidateService {
     private final RegistrationCandidateRepository candidateRepository;
     private final CandidateEvidenceWriter evidenceWriter;
     private final AiSourceReader sourceReader;
+    private final TargetItemReader targetReader;
     private final PlaceAliasRepository aliasRepository;
     private final JsonMapper jsonMapper;
     private final Clock clock;
@@ -90,10 +93,17 @@ public class CandidateService {
         evidenceWriter.lockGroup(job.getGroupId());
         int created = 0;
         int merged = 0;
+        CandidateTargets.Items items = null;
         for (ExtractedCandidate candidate : extracted) {
             List<EvidenceMessage> evidence = validEvidence(job, candidate, messages);
             Optional<Built> built = evidence.isEmpty() ? Optional.empty()
                     : builder.build(candidate, CandidateBuilder.anchorOf(candidate, evidence), context);
+            if (built.isPresent() && built.get().query() != null) {
+                if (items == null) {
+                    items = targetReader.load(job, context.now());
+                }
+                built = CandidateTargets.resolve(built.get(), items, context.now());
+            }
             if (built.isEmpty()) {
                 skipped++;
                 continue;
@@ -128,7 +138,8 @@ public class CandidateService {
         }
         RegistrationCandidate candidate = candidateRepository.saveAndFlush(new RegistrationCandidate(job,
                 usage, built.type(), jsonMapper.writeValueAsString(built.fields()), built.inferred(), built.missing(),
-                built.confidence(), built.dedupKey(), built.expiresAt()));
+                built.confidence(), built.dedupKey(), built.expiresAt(),
+                built.target() == null ? null : jsonMapper.writeValueAsString(built.target())));
         addEvidence(candidate.getId(), evidence);
         relay.toGroup(job.getGroupId(), ChatEvent.CANDIDATE_CREATED,
                 mapper.toResponse(candidate, new Anchor(anchor.id(), anchor.seq())));

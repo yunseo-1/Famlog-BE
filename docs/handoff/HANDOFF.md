@@ -98,7 +98,7 @@
 | 11/19 | S18 LLM: `claude-haiku-5-5` + 프롬프트 캐싱, 월 비용 상한 $20(80%에 경고 로그), 그룹별 하루 100회. 워커에 `anthropic` SDK 추가 승인. S18-1(후보 생성, 가짜 LLM) · S18-2(실제 LLM·프롬프트·상한·평가셋)로 나눈다 | 사용자 결정. 키는 `infra/.env`의 `ANTHROPIC_API_KEY`만 |
 | 11/19 | LLM 출력은 유형별 원문 표현 필드만(`dateText`·`attendeeTexts`…). 추정 표시·필수 누락·날짜·구성원·장소는 서버가 정한다. 다른 필드가 오면 `INVALID_OUTPUT` | 사용자 결정 (S18-1 계획 1) |
 | 11/19 | 일정 장소는 별칭만 맞춰 보고 카카오 검색은 PLACE 후보에만 (호출 절약) | 사용자 결정 |
-| 11/19 | 변경 요청("11시 말고 12시로")·완료 표현("샀어")은 S18에서 후보를 만들지 않는다. 기존 항목 수정·완료 후보(`target_ref`)는 S19 승인과 함께 | 사용자 결정, AR-8 |
+| 11/19 | 변경 요청("11시 말고 12시로")·완료 표현("샀어")은 S18에서 후보를 만들지 않는다. 기존 항목 수정·완료 후보(`target_ref`)는 S19-2에서 | 사용자 결정, AR-8 |
 | 11/19 | 지난 날짜 일정·지난 기한 할 일은 버리고, 해석 못 한 일정 날짜는 `missingFields:["date"]`로 만든다 | 사용자 결정 |
 | 11/19 | 중복: 같은 `dedupKey`의 최근 후보가 PENDING(만료 전)·APPROVED면 근거만, DISMISSED면 안 만듦, EXPIRED·UNDONE·만료된 PENDING이면 새로. 직접 등록한 항목과는 비교하지 않는다 | 사용자 결정 |
 | 11/19 | 만료 `expires_at`은 만들 때 정한다(일정 시각, 종일은 다음 날 0시, 나머지 7일). 만료 배치 없이 조회에서 거른다(S19) | 사용자 결정 |
@@ -116,6 +116,8 @@
 | 11/20 | 후보 처리 푸시는 승인 시스템 메시지의 채팅 푸시뿐. 참석자·담당자 개별 푸시·후보 생성 푸시는 S20 알림 설정과 함께 | 사용자 결정 |
 | 11/20 | 일정·할 일·장소 응답에 `source {messageId, seq}` (채팅에서 등록한 항목의 원문). 만료 승인은 409 `CANDIDATE_EXPIRED`. 같은 사람이 다시 처리하면 같은 결과(Idempotency-Key 대신) | 사용자 결정 |
 | 11/20 | S19-1: `source`에 `candidateId` 추가. 마이그레이션 없이 후보의 `created_entity_*`·근거 메시지로 찾는다 | 앱 요청, 사용자 결정 |
+| 11/20 | S19-2: 변경·완료 표현은 LLM이 원문만 뽑고(`SCHEDULE_CHANGE`·`TODO_DONE`) 서버가 그룹의 기존 항목에서 대상을 찾는다(목록을 LLM에 보내지 않음). 일정은 앞으로 60일·반복 아님·날짜/시각만, 할 일은 열린 것. 못 찾으면 버리고 여럿이면 5개까지 고르게 한다 | 사용자 결정 |
+| 11/20 | 변경 승인은 기존 일정 수정 권한(등록한 사람·ADMIN 이상, 아니면 403), 완료는 구성원 누구나. 그사이 대상이 바뀌었으면 409 `CANDIDATE_TARGET_CHANGED`. 되돌리면 바꾸기 전 값(그사이 또 바뀌었으면 409)·할 일 다시 열기. 프롬프트 `extract_v2` | 사용자 결정 |
 
 ## 3. Figma 상태
 
@@ -177,7 +179,8 @@
 | S18-1 | ARC-02~04·07 후보 생성: 검증·정규화·장소 상위 3개·중복 제거·신뢰도 (가짜 LLM) | ✅ PR #20 |
 | S18-2 | 실제 LLM(claude-haiku-5-5, 캐싱)·프롬프트 extract_v1·호출/비용 상한·평가셋 50건 | ✅ PR #21 |
 | S19 | ARC-05·06 후보 목록·상세·승인·무시·되돌리기, 원문 연결, candidate.* 이벤트 | ✅ PR #22 |
-| S19-1 | ARC-06 원문 보기 강조용 `source.candidateId` | ✅ 이번 PR |
+| S19-1 | ARC-06 원문 보기 강조용 `source.candidateId` | ✅ PR #23 |
+| S19-2 | ARC-04·6.4 기존 일정 변경·할 일 완료 후보(`target_ref`), 프롬프트 extract_v2, 평가셋 60건 | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -399,6 +402,20 @@
 
 **원문 보기 (ARC-06)**: 일정(상세·기간 조회 회차)·할 일·장소 응답의 `source {messageId, seq, candidateId}` (채팅에서 등록했으면, 아니면 null). `candidateId`는 그 메시지를 근거로 항목을 만든(장소는 기존 장소에 연결한) 승인 후보, 여럿이면 먼저 승인한 것. 앱은 `GET /candidates/{candidateId}`의 evidence spans로 추출 부분을 강조하고, null이면 메시지 전체를 강조한다 (S19-1)
 
+**기존 항목 변경·완료 후보 (S19-2)**: "11시 말고 12시로 하자"·"세제 샀어"는 새 항목이 아니라 기존 일정·할 일을 가리키는 후보다. `type`은 SCHEDULE·TODO 그대로이고 `target`이 있다 (새 항목 후보는 `target: null`).
+- `target`: `{entityType: SCHEDULE|TODO, action: CHANGE|COMPLETE, entityId, title, createdBy?, before, after?, choices}`
+  - 일정은 `createdBy`(대상 일정을 등록한 사람, choices 항목에도)를 준다 → 앱은 내가 등록한 사람도 ADMIN 이상도 아니면 [등록] 대신 "등록한 사람이나 관리자만 바꿀 수 있어요"를 미리 보여 줄 수 있다
+  - 일정 `before`·`after`: `{date, startTime, endTime, allDay, startsAt, endsAt}` (종일은 시각 null). `fields`는 바꾼 뒤 값 `{title, date, startTime, endTime, allDay}` → 카드에 "변경 전 → 후"
+  - 할 일 `before`: `{assigneeId, dueDate, done:false}`, `fields`: `{title}`
+  - 대상이 여럿(최대 5)이면 `entityId`·`title`·`before`·`after`가 null이고 `missingFields: ["targetId"]`, `choices[]`(`{entityId, title, createdBy?, before, after?}`)에서 고른다
+- 승인: `POST /candidates/{id}/approve {version, targetId?}` (일정·할 일 값은 보내지 않는다). 대상 여럿인데 `targetId`가 없으면 422 `CANDIDATE_MISSING_FIELDS`(field `targetId`), choices에 없는 id면 400
+  - 일정 변경: 그 일정의 날짜·시각만 바꾼다(길이 유지, 종일→시각을 정하면 시간 일정). 등록한 사람·ADMIN 이상만(아니면 403 `GROUP_ROLE_REQUIRED`, 후보는 PENDING 그대로)
+  - 할 일 완료: 구성원 누구나
+  - 그사이 대상이 바뀌었거나 지워졌거나 이미 완료됐으면 409 `CANDIDATE_TARGET_CHANGED`
+  - 응답 `entityType`·`entityId`는 대상 항목. 원문 연결(`source`)은 만들지 않는다
+  - 시스템 메시지(`CANDIDATE_APPROVED`): "엄마님이 '영화 보기' 일정을 12:00으로 바꿨어요." / "…'11월 15일(일)로'…" / "엄마님이 '세제 사 오기' 할 일을 완료했어요."
+- 되돌리기(5분): 일정은 바꾸기 전 시각으로(그사이 또 고쳤으면 409 `CANDIDATE_TARGET_CHANGED`), 할 일은 다시 연다. 시스템 메시지는 지운다
+
 ### 다음 단계로 넘긴 것
 
 - S20: 만료된 업로드(`PENDING_UPLOAD`)·삭제된 메시지의 미디어 파일 정리 배치, 워커 대기 메시지(PEL) 회수
@@ -408,7 +425,7 @@
 - S16~: AI 후보 푸시 (`channel=AI`, 같은 발송기)
 - S20: 비용 80%·상한 도달을 로그 대신 관리자 알림으로. 사용자: 처리방침용 Anthropic 데이터 처리 조건(학습 사용·보관 기간) 확인(S22 전)
 - 프롬프트·모델을 바꾸면 `worker/evals/README.md` 순서로 평가하고 기록 표에 남긴다 (실제 호출은 사용자 확인 후)
-- 다음(S20~): 기존 항목 수정·완료 후보(`target_ref`, "11시 말고 12시로"·"샀어"), 근거만 늘어난 후보의 이벤트, 후보 [신고](MOD-01), 참석자·담당자 개별 푸시, 기념일 1주 전 알림·음력(v1.1), 만료 후보 정리 배치
+- 다음(S20~): 변경 후보의 제목·참석자·장소 변경과 승인 전 값 고치기(v1.1), 근거만 늘어난 후보의 이벤트, 후보 [신고](MOD-01), 참석자·담당자 개별 푸시, 기념일 1주 전 알림·음력(v1.1), 만료 후보 정리 배치
 - S20: AI 분석 처음 켤 때 안내·국외 이전 고지·`AI_ANALYSIS`/`OVERSEAS_TRANSFER` 동의, 관리자가 구성원의 분석 제외 여부를 보는 화면(8.8), 스트림에 못 보내 `QUEUED`로 남은 `ai_jobs` 정리
 - S20: `feature_flags` 테이블·관리자 화면 (지금은 `nearby-enabled`·`photo-location-enabled` 설정값), 오래된 `location_access_logs` 보관 기간
 - 출시 전: 위치기반서비스 신고 확인 후 운영 `nearby-enabled` 값 결정, 카카오 로컬 API 이용 약관(결과 저장·캐시 범위) 확인

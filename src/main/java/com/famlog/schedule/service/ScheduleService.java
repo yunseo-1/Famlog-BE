@@ -91,6 +91,31 @@ public class ScheduleService {
                 itemSources.find(ItemSources.SCHEDULE, scheduleId));
     }
 
+    /** @param version 바꾼 뒤 일정 version (되돌릴 때 그사이 바뀌었는지 본다) */
+    public record Retimed(String title, long version) {
+    }
+
+    /**
+     * AI 변경 후보 승인·되돌리기 (S19-2): 날짜·시각만 from → to 로 바꾼다. 권한은 수정과 같다(아니면 403).
+     * 지금 시각이 from 과 다르거나 반복 일정이거나 version 이 주어졌는데 다르면 409 CANDIDATE_TARGET_CHANGED.
+     * 종일 여부가 바뀌면 알림은 그 종류의 기본값으로 바꾼다
+     */
+    @Transactional
+    public Retimed retime(long scheduleId, long userId, Schedule.Timing from, Schedule.Timing to, Long version) {
+        Schedule schedule = editable(scheduleId, userId);
+        boolean unchanged = schedule.getStartsAt().equals(from.startsAt()) && schedule.getEndsAt().equals(
+                from.endsAt()) && schedule.isAllDay() == from.allDay() && schedule.getRrule() == null;
+        if (!unchanged || (version != null && version != schedule.getVersion())) {
+            throw new BusinessException(ErrorCode.CANDIDATE_TARGET_CHANGED);
+        }
+        List<Reminder> reminders = to.allDay() == schedule.isAllDay() ? schedule.reminderList()
+                : to.allDay() ? Reminder.ALL_DAY_DEFAULT : Reminder.TIMED_DEFAULT;
+        schedule.update(schedule.getTitle(), to, null, schedule.getMemo(), reminders,
+                Set.copyOf(schedule.getParticipantIds()), schedule.getPlaceId());
+        scheduleRepository.saveAndFlush(schedule);
+        return new Retimed(schedule.getTitle(), schedule.getVersion());
+    }
+
     @Transactional
     public void delete(long scheduleId, long userId) {
         scheduleRepository.delete(editable(scheduleId, userId));

@@ -27,6 +27,7 @@ public enum ErrorCode {
     CANDIDATE_ALREADY_DECIDED(HttpStatus.CONFLICT, "다른 가족이 먼저 처리했어요."),
     VERSION_CONFLICT(HttpStatus.CONFLICT, "다른 가족이 먼저 수정했어요. 새로고침 후 다시 시도해 주세요."),
     CANDIDATE_EXPIRED(HttpStatus.CONFLICT, "시간이 지난 제안이에요."),
+    CANDIDATE_TARGET_CHANGED(HttpStatus.CONFLICT, "그사이 일정이나 할 일이 바뀌었거나 지워졌어요."),
     GROUP_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "가족 그룹 인원 또는 개수 제한을 넘었어요."),
     OWNER_TRANSFER_REQUIRED(HttpStatus.CONFLICT, "다른 가족에게 그룹장을 넘긴 뒤 나갈 수 있어요."),
     PLACE_ALREADY_SHARED(HttpStatus.CONFLICT, "이미 우리 가족이 공유한 장소예요."),

@@ -5,6 +5,7 @@
 - LLM 호출 자체가 실패하면 예외를 그대로 올린다 (소비자가 재시도·DLQ)
 """
 
+import json
 import time
 
 from pydantic import ValidationError
@@ -41,11 +42,21 @@ def process(job: ExtractJob, client: LlmClient) -> ExtractResult:
 
 def _validate(job: ExtractJob, text: str) -> LlmOutput:
     try:
-        output = LlmOutput.model_validate_json(text)
-    except ValidationError as e:
+        output = LlmOutput.model_validate(_drop_empty_fields(json.loads(text)))
+    except (ValueError, ValidationError) as e:
         raise InvalidOutput from e
     allowed = {message.id for message in job.payload.messages}
     for candidate in output.candidates:
         if any(evidence.message_id not in allowed for evidence in candidate.evidence):
             raise InvalidOutput
     return output
+
+
+def _drop_empty_fields(data):
+    """구조화 출력은 모든 유형의 필드를 null·빈 목록으로 채워 보낸다 (llm.OUTPUT_SCHEMA). 값이 있는 필드만 남긴다"""
+    if isinstance(data, dict) and isinstance(data.get("candidates"), list):
+        for candidate in data["candidates"]:
+            fields = candidate.get("fields") if isinstance(candidate, dict) else None
+            if isinstance(fields, dict):
+                candidate["fields"] = {k: v for k, v in fields.items() if v is not None and v != []}
+    return data

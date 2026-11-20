@@ -43,11 +43,34 @@ public final class ExtractDtos {
     }
 
     /**
+     * LLM 이 낸 후보 종류. SCHEDULE_CHANGE·TODO_DONE 은 기존 일정 변경·할 일 완료 표현이다 (S19-2).
+     * 서버가 그룹의 기존 항목에서 대상을 찾아 SCHEDULE·TODO 후보(target_ref)로 만든다. 못 찾으면 만들지 않는다
+     */
+    public enum ExtractedKind {
+        SCHEDULE(CandidateType.SCHEDULE),
+        ANNIVERSARY(CandidateType.ANNIVERSARY),
+        TODO(CandidateType.TODO),
+        PLACE(CandidateType.PLACE),
+        SCHEDULE_CHANGE(CandidateType.SCHEDULE),
+        TODO_DONE(CandidateType.TODO);
+
+        private final CandidateType candidateType;
+
+        ExtractedKind(CandidateType candidateType) {
+            this.candidateType = candidateType;
+        }
+
+        public CandidateType candidateType() {
+            return candidateType;
+        }
+    }
+
+    /**
      * 워커 결과(famlog:ai.extract-results 의 candidates 필드)의 후보 하나. 워커가 스키마를 검사했지만 여기서 한 번 더 읽는다.
      * 값은 모두 원문 표현이다. 날짜 계산·구성원 매칭·장소 확정은 서버가 한다 (CandidateBuilder).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ExtractedCandidate(CandidateType type, ExtractedFields fields, double confidence,
+    public record ExtractedCandidate(ExtractedKind type, ExtractedFields fields, double confidence,
             List<ExtractedEvidence> evidence) {
     }
 
@@ -58,12 +81,15 @@ public final class ExtractDtos {
      * <li>TODO: title, dueText, assigneeTexts</li>
      * <li>ANNIVERSARY: title, dateText, personText</li>
      * <li>PLACE: name, regionHint, opinion</li>
+     * <li>SCHEDULE_CHANGE: title(어떤 일정인지 핵심어), fromDateText·fromTimeText(바꾸기 전), dateText·startTimeText(바꿀 값)</li>
+     * <li>TODO_DONE: title(끝낸 일의 핵심어)</li>
      * </ul>
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ExtractedFields(String title, String dateText, String startTimeText, String endTimeText,
             String locationText, List<String> attendeeTexts, String dueText, List<String> assigneeTexts,
-            String personText, String name, String regionHint, String opinion) {
+            String personText, String name, String regionHint, String opinion, String fromDateText,
+            String fromTimeText) {
     }
 
     /** @param spans 추출한 부분 (원문 강조용) */

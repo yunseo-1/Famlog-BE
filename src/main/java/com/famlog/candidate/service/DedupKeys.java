@@ -2,7 +2,9 @@ package com.famlog.candidate.service;
 
 import java.time.LocalDate;
 import java.time.MonthDay;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 import com.famlog.candidate.domain.CandidateType;
 
@@ -39,6 +41,12 @@ public final class DedupKeys {
     public static String place(String kakaoPlaceId, String name) {
         return cut(CandidateType.PLACE + "|"
                 + (kakaoPlaceId != null ? "kakao:" + kakaoPlaceId : "name:" + normalize(name)));
+    }
+
+    /** 기존 항목 변경·완료 (S19-2): 유형 + 동작 + 대상 id 들 + 바꿀 값 */
+    public static String target(CandidateType type, String action, List<Long> entityIds, String change) {
+        return cut(type + "|" + action + "|" + entityIds.stream().sorted().map(String::valueOf)
+                .collect(Collectors.joining(",")) + "|" + change);
     }
 
     private static String cut(String key) {
