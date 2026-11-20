@@ -58,10 +58,14 @@ public final class GroupApi {
     }
 
     /** 그룹 AI 분석 켜기·끄기 (SET-01, ADMIN 이상) */
+    /** application.yml famlog.consent.ai-notice.version */
+    public static final String AI_NOTICE_VERSION = "1.0";
+
     public static void setAiAnalysis(MockMvc mockMvc, long groupId, long actorId, boolean enabled) throws Exception {
         mockMvc.perform(patch("/api/v1/groups/{g}/settings", groupId).with(as(actorId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"aiAnalysisEnabled\":%s}".formatted(enabled)))
+                        .content("{\"aiAnalysisEnabled\":%s,\"aiNoticeVersion\":\"%s\"}".formatted(enabled,
+                                AI_NOTICE_VERSION)))
                 .andExpect(status().isOk());
     }
 

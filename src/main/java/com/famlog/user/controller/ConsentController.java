@@ -32,9 +32,11 @@ public class ConsentController {
         return consentService.list(user.userId());
     }
 
-    @Operation(summary = "동의·철회", description = "지금은 LOCATION(위치기반서비스 이용약관 + 개인위치정보 수집·이용)만. "
-            + "동의 {agreed:true, docVersion}(현재 버전과 다르면 400), 철회 {agreed:false} → 내가 올린 사진의 위치도 지운다. "
-            + "TERMS·PRIVACY·AI_ANALYSIS·OVERSEAS_TRANSFER 는 400")
+    @Operation(summary = "동의·철회", description = "LOCATION(위치기반서비스 이용약관 + 개인위치정보 수집·이용)과 AI_ANALYSIS. "
+            + "동의 {agreed:true, docVersion}(현재 버전과 다르면 400), 철회 {agreed:false}. "
+            + "LOCATION 철회 → 내가 올린 사진의 위치도 지운다. AI_ANALYSIS 는 AI 분석 안내(GET /ai-notice) 확인으로, "
+            + "OVERSEAS_TRANSFER 도 함께 기록·철회하고 철회하면 내 모든 그룹에서 분석 제외를 켠다. "
+            + "TERMS·PRIVACY·OVERSEAS_TRANSFER 는 400")
     @PutMapping("/{type}")
     ConsentResponse updateConsent(AuthUser user, @PathVariable ConsentType type,
             @Valid @RequestBody UpdateConsentRequest request) {

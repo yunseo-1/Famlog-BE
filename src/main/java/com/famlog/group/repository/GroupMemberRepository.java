@@ -19,6 +19,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     List<GroupMember> findByGroupIdAndLeftAtIsNullOrderByJoinedAtAsc(Long groupId);
 
+    /** 내가 지금 속한 그룹들 */
+    List<GroupMember> findByUserIdAndLeftAtIsNull(Long userId);
+
     /** 나간 구성원 포함 */
     List<GroupMember> findByGroupId(Long groupId);
 

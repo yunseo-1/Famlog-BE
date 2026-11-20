@@ -30,7 +30,8 @@ class ConsentApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.items[*].agreed", contains(false, false, false, false, false)))
                 .andExpect(jsonPath("$.items[4].currentVersion").value("1.0"))
                 .andExpect(jsonPath("$.items[4].docVersion").doesNotExist())
-                .andExpect(jsonPath("$.items[2].currentVersion").doesNotExist());
+                .andExpect(jsonPath("$.items[2].currentVersion").value(GroupApi.AI_NOTICE_VERSION))
+                .andExpect(jsonPath("$.items[3].currentVersion").value(GroupApi.AI_NOTICE_VERSION));
     }
 
     @Test
@@ -90,9 +91,51 @@ class ConsentApiTest extends IntegrationTest {
     }
 
     @Test
-    void 위치_외의_동의는_여기서_바꿀_수_없다() throws Exception {
+    void AI_분석_안내를_확인하면_국외_이전_고지도_함께_남고_버전이_다르면_400() throws Exception {
         long user = createUser();
-        for (String type : new String[] { "TERMS", "PRIVACY", "AI_ANALYSIS", "OVERSEAS_TRANSFER", "MARKETING" }) {
+
+        ai(user, "{\"agreed\":true,\"docVersion\":\"0.9\"}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("docVersion"));
+        ai(user, "{\"agreed\":true,\"docVersion\":\"1.0\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("AI_ANALYSIS"))
+                .andExpect(jsonPath("$.agreed").value(true))
+                .andExpect(jsonPath("$.docVersion").value("1.0"));
+        ai(user, "{\"agreed\":true,\"docVersion\":\"1.0\"}").andExpect(status().isOk());
+
+        mockMvc.perform(get(CONSENTS).with(asUser(user)))
+                .andExpect(jsonPath("$.items[*].agreed", contains(false, false, true, true, false)))
+                .andExpect(jsonPath("$.items[3].docVersion").value("1.0"));
+        assertThat(aiRows(user, false)).isEqualTo(2);
+    }
+
+    @Test
+    void AI_분석_동의를_철회하면_내_모든_그룹에서_분석_제외가_켜진다() throws Exception {
+        long user = createUser();
+        long other = createUser();
+        long first = GroupApi.createGroup(mockMvc, user, "우리 가족");
+        long second = GroupApi.createGroup(mockMvc, other, "외가");
+        GroupApi.addMember(mockMvc, second, other, user);
+        ai(user, "{\"agreed\":true,\"docVersion\":\"1.0\"}").andExpect(status().isOk());
+
+        ai(user, "{\"agreed\":false}").andExpect(status().isOk()).andExpect(jsonPath("$.agreed").value(false));
+
+        assertThat(aiRows(user, true)).isZero();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT group_id FROM group_members
+                WHERE user_id = ? AND ai_opt_out AND ai_opt_out_changed_at IS NOT NULL ORDER BY group_id
+                """, Long.class, user)).containsExactly(first, second);
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_opt_out FROM group_members WHERE user_id = ? "
+                + "AND group_id = ?", Boolean.class, other, second)).isFalse();
+
+        ai(user, "{\"agreed\":true,\"docVersion\":\"1.0\"}").andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT bool_and(ai_opt_out) FROM group_members WHERE user_id = ?",
+                Boolean.class, user)).isTrue();
+    }
+
+    @Test
+    void 필수_동의와_국외_이전은_여기서_바꿀_수_없다() throws Exception {
+        long user = createUser();
+        for (String type : new String[] { "TERMS", "PRIVACY", "OVERSEAS_TRANSFER", "MARKETING" }) {
             mockMvc.perform(put(CONSENTS + "/{t}", type).with(asUser(user)).contentType(MediaType.APPLICATION_JSON)
                             .content("{\"agreed\":false}"))
                     .andExpect(status().isBadRequest());
@@ -119,6 +162,11 @@ class ConsentApiTest extends IntegrationTest {
         mockMvc.perform(get(CONSENTS)).andExpect(status().isUnauthorized());
     }
 
+    private ResultActions ai(long userId, String body) throws Exception {
+        return mockMvc.perform(put(CONSENTS + "/AI_ANALYSIS").with(asUser(userId))
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
     private ResultActions location(long userId, String body) throws Exception {
         return mockMvc.perform(put(CONSENTS + "/LOCATION").with(asUser(userId))
                 .contentType(MediaType.APPLICATION_JSON).content(body));
@@ -127,6 +175,13 @@ class ConsentApiTest extends IntegrationTest {
     private long rows(long userId) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM consents WHERE user_id = ? AND type = 'LOCATION'",
                 Long.class, userId);
+    }
+
+    /** AI_ANALYSIS·OVERSEAS_TRANSFER 행 수 */
+    private long aiRows(long userId, boolean activeOnly) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM consents WHERE user_id = ? AND type IN "
+                + "('AI_ANALYSIS', 'OVERSEAS_TRANSFER')" + (activeOnly ? " AND withdrawn_at IS NULL" : ""), Long.class,
+                userId);
     }
 
     private long activeRows(long userId) {
