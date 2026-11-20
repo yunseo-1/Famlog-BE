@@ -71,8 +71,34 @@ public class User extends BaseTimeEntity {
         return user;
     }
 
+    public static final String DELETED_NICKNAME = "탈퇴한 구성원";
+
     public boolean isActive() {
         return status == UserStatus.ACTIVE;
+    }
+
+    public boolean isPendingDeletion() {
+        return status == UserStatus.PENDING_DELETION;
+    }
+
+    /** 계정 삭제 요청 (ACC-01): 로그인할 수 없다. 30일 안에 복구할 수 있다 */
+    public void requestDeletion() {
+        this.status = UserStatus.PENDING_DELETION;
+        this.lastGroupId = null;
+    }
+
+    public void restore() {
+        this.status = UserStatus.ACTIVE;
+    }
+
+    /** 파기 (사양서 8.9): 닉네임은 "탈퇴한 구성원", 프로필 사진·출생연도월은 지운다. 행은 메시지 작성자 표시를 위해 남긴다 */
+    public void purge(Instant now) {
+        this.status = UserStatus.DELETED;
+        this.nickname = DELETED_NICKNAME;
+        this.profileImageKey = null;
+        this.birthYm = null;
+        this.lastGroupId = null;
+        this.deletedAt = now;
     }
 
     /** 현재 가족 그룹 (사양서 4.1 GRP-03). 구성원인지는 호출하는 쪽에서 확인한다 */

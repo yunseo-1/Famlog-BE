@@ -146,6 +146,10 @@ famlog:
       output: 0.50
       cache-read: 0.01
       cache-write: 0.125           # 5분 캐시 쓰기 = 입력 × 1.25
+  # 계정 삭제 (사양서 4.1 ACC-01, 8.9): 요청 뒤 30일 유예(로그인하면 복구), 매일 04:00 파기 배치
+  account:
+    deletion-grace: 30d
+    purge-enabled: true
   # 최소 관리자 도구 (사양서 14장, /admin). 토큰은 환경변수 FAMLOG_ADMIN_TOKEN. 비어 있으면 관리자 API 가 꺼진다(404)
   admin:
     token: ""

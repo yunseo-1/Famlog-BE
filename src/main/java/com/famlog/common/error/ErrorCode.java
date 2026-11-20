@@ -20,6 +20,7 @@ public enum ErrorCode {
     LOCATION_CONSENT_REQUIRED(HttpStatus.FORBIDDEN, "위치기반서비스 이용에 동의해야 쓸 수 있어요."),
     MESSAGE_NOT_DELETABLE(HttpStatus.FORBIDDEN, "내가 보낸 메시지만 보낸 지 5분 안에 지울 수 있어요."),
     CANDIDATE_NOT_UNDOABLE(HttpStatus.FORBIDDEN, "등록한 가족이나 관리자만 5분 안에 되돌릴 수 있어요."),
+    ACCOUNT_PENDING_DELETION(HttpStatus.FORBIDDEN, "삭제 예정인 계정이에요. 복구하면 다시 쓸 수 있어요."),
     AGE_RESTRICTED(HttpStatus.FORBIDDEN, "만 14세 이상만 가입할 수 있어요. 보호자와 함께 사용하는 기능은 곧 제공돼요."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "찾을 수 없어요."),
     USER_NOT_REGISTERED(HttpStatus.NOT_FOUND, "처음 오셨네요. 가입을 진행해 주세요."),
