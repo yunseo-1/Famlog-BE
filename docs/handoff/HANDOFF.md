@@ -335,7 +335,7 @@
 **AI 분석 안내·동의 (S20-1, SET-01·8.3)** — 고지 확인 방식: 확인하지 않아도 분석은 되고, 개인은 언제든 분석 제외
 - `GET /ai-notice` → `{version, recipient, country, sentItems[], notSentItems[], purpose, retention, refusal}` (서버 설정 `famlog.consent.ai-notice`, 문구 초안: S22 전 Anthropic 조건·법률 검토로 확정). 문구를 고치면 version을 올린다 → 모두 다시 안내
 - 꺼진 그룹을 켤 때 `aiNoticeVersion` 필수(관리자에게 안내를 보여 준 버전). 없거나 현재 버전과 다르면 400 `VALIDATION_FAILED`(field `aiNoticeVersion`). 켜면 그 관리자의 AI_ANALYSIS·OVERSEAS_TRANSFER 확인을 기록. 끌 때·이미 켜진 상태는 필요 없음
-- `aiNoticePending`: 켜져 있는데 내가 현재 버전 안내를 확인하지 않았으면 true → 앱이 안내 시트를 한 번([확인] / [내 메시지 분석 제외])
+- `aiNoticePending`(사람 단위 확인): 켜져 있는데 내가 현재 버전 안내를 확인하지 않았고 이 그룹에서 분석 제외(`aiOptOut`)도 안 했으면 true. 설정 변경 WebSocket 이벤트는 없다 → 그룹에 들어갈 때 조회 → 앱이 안내 시트를 한 번([확인] / [내 메시지 분석 제외])
 - 확인·철회 `PUT /users/me/consents/AI_ANALYSIS {agreed, docVersion}`: 확인은 AI_ANALYSIS·OVERSEAS_TRANSFER를 같은 버전으로 함께 기록(버전 다르면 400 field `docVersion`). 철회 `{agreed:false}`는 둘 다 철회 + 내 모든 그룹에서 `aiOptOut=true`. 다시 확인해도 그룹별 제외는 자동으로 풀지 않음. `OVERSEAS_TRANSFER` 단독 PUT은 400
 - `GET /users/me/consents`: AI_ANALYSIS·OVERSEAS_TRANSFER의 `currentVersion`이 안내 버전으로 나온다 (동의 내역 화면)
 - 그룹 상세 `members[].aiOptOut`: ADMIN 이상에게만 true/false, 그 밖에는 null (볼 수만 있다, 8.8)

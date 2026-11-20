@@ -155,6 +155,18 @@ class GroupSettingsApiTest extends IntegrationTest {
     }
 
     @Test
+    void 이_그룹에서_분석_제외했으면_안내하지_않는다() throws Exception {
+        patchSettings(family.mom(), ON).andExpect(status().isOk());
+        GroupApi.setAiOptOut(mockMvc, family.groupId(), family.son(), true);
+
+        mockMvc.perform(get(SETTINGS, family.groupId()).with(asUser(family.son())))
+                .andExpect(jsonPath("$.aiNoticePending").value(false));
+        GroupApi.setAiOptOut(mockMvc, family.groupId(), family.son(), false);
+        mockMvc.perform(get(SETTINGS, family.groupId()).with(asUser(family.son())))
+                .andExpect(jsonPath("$.aiNoticePending").value(true));
+    }
+
+    @Test
     void 구성원의_분석_제외는_관리자만_볼_수_있다() throws Exception {
         GroupApi.setAiOptOut(mockMvc, family.groupId(), family.son(), true);
 

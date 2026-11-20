@@ -92,7 +92,8 @@ public final class GroupDtos {
     /**
      * @param aiEnabledAt     마지막으로 켠 시각 (한 번도 안 켰으면 null)
      * @param aiNoticeVersion 현재 AI 분석 안내 버전
-     * @param aiNoticePending AI 분석이 켜져 있는데 내가 현재 안내를 확인하지 않았다 → 앱이 안내를 한 번 보여 준다
+     * @param aiNoticePending AI 분석이 켜져 있는데 내가 현재 안내를 확인하지 않았고 이 그룹에서 분석 제외도 안 했다
+     *                        → 앱이 안내를 한 번 보여 준다
      */
     public record GroupSettingsResponse(boolean aiAnalysisEnabled, Instant aiEnabledAt, String aiNoticeVersion,
             boolean aiNoticePending) {
