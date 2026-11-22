@@ -46,9 +46,14 @@ def main() -> None:
 
     log.info("워커 시작: media=%s ai=%s llm=%s", settings.jobs_stream, settings.ai_jobs_stream,
              settings.llm_provider)
+    next_reclaim = 0.0
     while running:
         HEARTBEAT.touch()
         try:
+            if time.monotonic() >= next_reclaim:  # 시작할 때와 주기적으로 멈춘 대기 메시지를 회수한다
+                consumer.reclaim_once()
+                ai_consumer.reclaim_once()
+                next_reclaim = time.monotonic() + settings.reclaim_interval_seconds
             consumer.run_once(block_ms=2000)
             ai_consumer.run_once(block_ms=2000)
         except redis.RedisError as e:

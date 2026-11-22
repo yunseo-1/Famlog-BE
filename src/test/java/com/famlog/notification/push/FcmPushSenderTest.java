@@ -10,11 +10,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,6 +29,7 @@ class FcmPushSenderTest {
 
     private static final String SEND_URL = "https://fcm.test/v1/projects/famlog-test/messages:send";
 
+    private final List<Duration> sleeps = new ArrayList<>();
     private MockRestServiceServer server;
     private FcmPushSender sender;
 
@@ -33,7 +37,8 @@ class FcmPushSenderTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://fcm.test");
         server = MockRestServiceServer.bindTo(builder).build();
-        sender = new FcmPushSender(builder.build(), "famlog-test", () -> "oauth-access-token");
+        sleeps.clear();
+        sender = new FcmPushSender(builder.build(), "famlog-test", () -> "oauth-access-token", sleeps::add);
     }
 
     @Test
@@ -65,14 +70,40 @@ class FcmPushSenderTest {
     }
 
     @Test
-    void 토큰_문제가_아닌_실패는_토큰을_지우지_않고_다음_기기로_계속_보낸다() {
+    void 토큰_문제가_아닌_400은_다시_보내지_않고_토큰도_지우지_않는다() {
         respond(HttpStatus.BAD_REQUEST, error(400, "INVALID_ARGUMENT", "Invalid JSON payload received.",
                 "INVALID_ARGUMENT"));
-        server.expect(requestTo(SEND_URL)).andRespond(withServerError());
-        respond(HttpStatus.TOO_MANY_REQUESTS, error(429, "RESOURCE_EXHAUSTED", "Quota exceeded", "QUOTA_EXCEEDED"));
         server.expect(requestTo(SEND_URL)).andRespond(withSuccess());
 
-        assertThat(sender.send(List.of(message("a"), message("b"), message("c"), message("d")))).isEmpty();
+        assertThat(sender.send(List.of(message("a"), message("b")))).isEmpty();
+        assertThat(sleeps).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void 서버_오류는_1초_2초_뒤_다시_보내고_세_번째에_성공하면_끝난다() {
+        server.expect(requestTo(SEND_URL)).andRespond(withServerError());
+        server.expect(requestTo(SEND_URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo(SEND_URL)).andRespond(withSuccess());
+
+        assertThat(sender.send(List.of(message("a")))).isEmpty();
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(1), Duration.ofSeconds(2));
+        server.verify();
+    }
+
+    @Test
+    void 요청_한도_초과는_Retry_After만큼_기다리고_세_번_실패하면_포기하고_다음_기기로_보낸다() {
+        HttpHeaders retryAfter = new HttpHeaders();
+        retryAfter.set(HttpHeaders.RETRY_AFTER, "3");
+        HttpHeaders tooLong = new HttpHeaders();
+        tooLong.set(HttpHeaders.RETRY_AFTER, "120");
+        server.expect(requestTo(SEND_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).headers(retryAfter));
+        server.expect(requestTo(SEND_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).headers(tooLong));
+        server.expect(requestTo(SEND_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+        server.expect(requestTo(SEND_URL)).andRespond(withSuccess());
+
+        assertThat(sender.send(List.of(message("a"), message("b")))).isEmpty();
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(3), Duration.ofSeconds(10));
         server.verify();
     }
 

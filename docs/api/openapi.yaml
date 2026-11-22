@@ -215,6 +215,26 @@ paths:
           description: 실패. code 로 원인을 구분한다
       tags:
       - admin
+  /admin/api/ops-summary:
+    get:
+      description: "이번 달(UTC) AI 비용·상한·비율·단계(OK/WARN/OVER), 실패·대기 요청 수, DLQ 길이"
+      operationId: opsSummary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpsSummary"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 운영 배너
+      tags:
+      - admin
   /admin/api/reports:
     get:
       description: "아동 안전 먼저, 그다음 최신 순. 콘텐츠는 넣지 않는다"
@@ -3806,6 +3826,34 @@ components:
           format: date-time
         title:
           type: string
+    OpsSummary:
+      type: object
+      properties:
+        budgetUsd:
+          type: number
+        deadLetters:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        failedJobsThisMonth:
+          type: integer
+          format: int64
+        jobsThisMonth:
+          type: integer
+          format: int64
+        level:
+          type: string
+        month:
+          type: string
+        percent:
+          type: integer
+          format: int32
+        queuedJobs:
+          type: integer
+          format: int64
+        spentUsd:
+          type: number
     PlaceListResponse:
       type: object
       properties:

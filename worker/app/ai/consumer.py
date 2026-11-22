@@ -11,6 +11,7 @@ import logging
 from pydantic import ValidationError
 
 from ..config import Settings
+from ..reclaim import reclaim_pending
 from .llm import LlmClient
 from .pipeline import process
 from .schemas import ExtractJob, ExtractResult
@@ -45,6 +46,23 @@ class AiConsumer:
                 self.handle(message_id, _decode(fields))
                 handled += 1
         return handled
+
+    def reclaim_once(self) -> int:
+        """처리 중 죽은 워커가 남긴 요청을 다시 처리한다. 계속 실패하면 DLQ 로 보내고 FAILED 를 알린다"""
+        return reclaim_pending(self.redis, self.settings.ai_jobs_stream, self.settings.ai_group,
+                               self.settings.consumer, self.settings.reclaim_idle_ms, self.settings.max_attempts,
+                               self.handle, self._give_up)
+
+    def _give_up(self, message_id, fields: dict[str, str]) -> None:
+        try:
+            self.redis.xadd(self.settings.ai_dlq_stream, _dlq_fields(fields, "STUCK"))
+            job_id = _safe_job_id(fields)
+            if job_id:
+                failed = ExtractResult(job_id=int(job_id), status="FAILED", error_code="STUCK")
+                self.redis.xadd(self.settings.ai_results_stream, failed.to_fields())
+        finally:
+            self.redis.xack(self.settings.ai_jobs_stream, self.settings.ai_group, message_id)
+            self.redis.xdel(self.settings.ai_jobs_stream, message_id)
 
     def handle(self, message_id, fields: dict[str, str]) -> None:
         try:

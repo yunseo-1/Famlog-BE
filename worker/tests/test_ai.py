@@ -203,3 +203,21 @@ def test_로그에_대화_본문이_남지_않는다(caplog):
     assert caplog.records
     assert all(SECRET_TEXT not in record.getMessage() for record in caplog.records)
     assert all("할머니" not in record.getMessage() for record in caplog.records)
+
+
+def test_멈춘_분석_요청은_회수해_다시_처리하고_계속_멈추면_본문_없이_DLQ로_보낸다(caplog):
+    redis = FakeRedis()
+    consumer = AiConsumer(redis, SETTINGS, create_client(SETTINGS))
+    redis.add_pending(SETTINGS.ai_jobs_stream, "5-0", fields(job_id="7"), times_delivered=1)
+    redis.add_pending(SETTINGS.ai_jobs_stream, "6-0", fields(job_id="8"), times_delivered=SETTINGS.max_attempts)
+
+    with caplog.at_level(logging.INFO):
+        assert consumer.reclaim_once() == 2
+
+    results = {r["jobId"]: r for r in redis.entries(SETTINGS.ai_results_stream)}
+    assert results["7"]["status"] == "DONE"
+    assert (results["8"]["status"], results["8"]["errorCode"]) == ("FAILED", "STUCK")
+    [dead] = redis.entries(SETTINGS.ai_dlq_stream)
+    assert dead == {"jobId": "8", "attempt": "1", "error": "STUCK"}
+    assert sorted(redis.acked) == ["5-0", "6-0"] and sorted(redis.deleted) == ["5-0", "6-0"]
+    assert SECRET_TEXT not in caplog.text

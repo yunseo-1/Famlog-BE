@@ -35,6 +35,8 @@ class Settings:
     anthropic_api_key: str | None = field(default=None, repr=False)  # 로그·repr 에 나오지 않게
 
     max_attempts: int = 3  # 사양서 20 S9·S16: 실패 재시도 3회 후 DLQ
+    reclaim_idle_ms: int = 300_000  # 5분 넘게 확인되지 않은 대기 메시지(처리 중 죽은 워커)를 다시 가져온다
+    reclaim_interval_seconds: float = 60.0
     max_video_seconds: int = 300  # 동영상 5분 (CHAT-05)
     max_image_pixels: int = 100_000_000  # 압축 폭탄 방지
 

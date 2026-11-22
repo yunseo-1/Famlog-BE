@@ -85,6 +85,7 @@ class FakeRedis:
         self.streams: dict[str, list[dict]] = {}
         self.acked: list = []
         self.deleted: list = []
+        self.pending: list[tuple] = []  # (stream, message_id, fields 또는 None, times_delivered)
 
     def xadd(self, stream, fields):
         self.streams.setdefault(stream, []).append(dict(fields))
@@ -98,6 +99,16 @@ class FakeRedis:
 
     def xgroup_create(self, *args, **kwargs):
         return True
+
+    def add_pending(self, stream, message_id, fields, times_delivered):
+        self.pending.append((stream, message_id, fields, times_delivered))
+
+    def xpending_range(self, stream, group, min, max, count, idle=None):
+        return [{"message_id": mid, "times_delivered": n}
+                for s, mid, _f, n in self.pending if s == stream][:count]
+
+    def xclaim(self, stream, group, consumer, min_idle_time, message_ids):
+        return [(mid, f) for s, mid, f, _n in self.pending if s == stream and mid in message_ids]
 
     def entries(self, stream) -> list[dict]:
         return self.streams.get(stream, [])

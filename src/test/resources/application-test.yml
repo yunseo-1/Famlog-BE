@@ -17,6 +17,9 @@ famlog:
     ticker-enabled: false
   cleanup:
     enabled: false
+  stream-reclaim:
+    enabled: false
+    min-idle: 0s
   schedule:
     reminder-enabled: false
   ai:

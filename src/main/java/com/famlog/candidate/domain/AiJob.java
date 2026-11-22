@@ -108,6 +108,9 @@ public class AiJob extends BaseTimeEntity {
      *
      * @param inputTokens 캐시를 거치지 않은 입력
      */
+    /** 워커로 보낸 뒤 오래 결과가 없어 서버가 실패로 정리한 요청 */
+    public static final String STALE = "STALE";
+
     public record Usage(String modelVersion, String promptVersion, Integer inputTokens, Integer outputTokens,
             Integer cacheReadTokens, Integer cacheWriteTokens, Integer latencyMs) {
     }
@@ -122,6 +125,21 @@ public class AiJob extends BaseTimeEntity {
         apply(usage, now);
         this.status = AiJobStatus.FAILED;
         this.errorCode = errorCode;
+    }
+
+    /** 멈춘 요청으로 FAILED(STALE) 처리된 뒤 결과가 늦게 왔다: 비용 계산을 위해 토큰 수만 남긴다 (후보는 만들지 않는다) */
+    public boolean recordLateUsage(Usage usage) {
+        if (status != AiJobStatus.FAILED || !STALE.equals(errorCode)) {
+            return false;
+        }
+        this.modelVersion = usage.modelVersion();
+        this.promptVersion = usage.promptVersion();
+        this.inputTokens = usage.inputTokens();
+        this.outputTokens = usage.outputTokens();
+        this.cacheReadTokens = usage.cacheReadTokens();
+        this.cacheWriteTokens = usage.cacheWriteTokens();
+        this.latencyMs = usage.latencyMs();
+        return true;
     }
 
     public boolean isFinished() {

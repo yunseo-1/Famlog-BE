@@ -169,6 +169,11 @@ famlog:
     candidates-after: 365d
     audit-logs-after: 365d
     data-exports-after: 30d
+  # 워커 결과 스트림의 멈춘 대기 메시지 회수: 1분마다, 5분 넘게 확인되지 않은 것을 다시 처리하고 3번이면 DLQ
+  stream-reclaim:
+    enabled: true
+    min-idle: 5m
+    max-deliveries: 3
   # 최소 관리자 도구 (사양서 14장, /admin). 토큰은 환경변수 FAMLOG_ADMIN_TOKEN. 비어 있으면 관리자 API 가 꺼진다(404)
   admin:
     token: ""
