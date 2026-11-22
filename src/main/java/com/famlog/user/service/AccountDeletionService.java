@@ -42,7 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>복구: 유예 중 로그인하며 restore=true 로 다시 로그인하면 계정과 함께 삭제 예정으로 돌린 그룹을 되살린다</li>
  * <li>파기(배치): 닉네임 "탈퇴한 구성원", 프로필 사진·출생연도월·소셜 계정·세션·알림 설정·장소 표시를 지우고 모든 그룹에서 나간다.
  * 사진 위치는 언제나 지우고, 사진·동영상 삭제를 골랐으면 S3 객체와 함께 지우고 그 메시지를 삭제 처리한다.
- * 메시지 내용·일정·장소·동의 이력·신고·감사 기록은 남긴다. 감사 로그에는 건수만</li>
+ * 남은 내보내기 파일도 지운다. 메시지 내용·일정·장소·동의 이력·신고·감사 기록은 남긴다. 감사 로그에는 건수만</li>
  * </ul>
  */
 @Slf4j
@@ -56,6 +56,7 @@ public class AccountDeletionService {
 
     private final UserRepository userRepository;
     private final AccountDeletionRequestRepository requestRepository;
+    private final DataExportService dataExportService;
     private final GroupService groupService;
     private final SessionTokenService sessionTokenService;
     private final ChatService chatService;
@@ -146,6 +147,7 @@ public class AccountDeletionService {
         jdbcTemplate.update("DELETE FROM user_sessions WHERE user_id = ?", userId);
         jdbcTemplate.update("DELETE FROM user_notification_settings WHERE user_id = ?", userId);
         jdbcTemplate.update("DELETE FROM place_marks WHERE user_id = ?", userId);
+        dataExportService.discardAll(userId);
 
         User user = userRepository.findById(userId).orElseThrow();
         user.purge(now);

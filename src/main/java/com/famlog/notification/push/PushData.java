@@ -27,12 +27,14 @@ public final class PushData {
     public static final String STARTS_AT = "startsAt";
     public static final String ALL_DAY = "allDay";
     public static final String REMINDER = "reminder";
+    public static final String EXPORT_ID = "exportId";
 
     /** type 값 */
     public static final String CHAT_MESSAGE = "CHAT_MESSAGE";
     public static final String MEMBER_REMOVED = "MEMBER_REMOVED";
     public static final String NEW_DEVICE_LOGIN = "NEW_DEVICE_LOGIN";
     public static final String SCHEDULE_REMINDER = "SCHEDULE_REMINDER";
+    public static final String DATA_EXPORT_READY = "DATA_EXPORT_READY";
 
     /** channel 값 (앱 알림 채널 4개. AI는 S16~에서 쓴다) */
     public static final String CHANNEL_CHAT = "CHAT";
