@@ -157,6 +157,18 @@ famlog:
     cooldown: 24h
     max-attempts: 3
     ticker-enabled: true
+  # 운영 정리 배치 (사양서 8.2 보관·파기): 그룹 파기 04:30, 미디어 정리 매시, 보관 기간 정리 04:45 (KST)
+  cleanup:
+    enabled: true
+    unattached-media-after: 24h
+    sessions-after: 90d
+    invites-after: 30d
+    reminder-sends-after: 30d
+    location-logs-after: 180d
+    reports-after: 365d
+    candidates-after: 365d
+    audit-logs-after: 365d
+    data-exports-after: 30d
   # 최소 관리자 도구 (사양서 14장, /admin). 토큰은 환경변수 FAMLOG_ADMIN_TOKEN. 비어 있으면 관리자 API 가 꺼진다(404)
   admin:
     token: ""

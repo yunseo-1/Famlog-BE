@@ -187,7 +187,7 @@ public class ChatService {
                 asset.getGroupId() == groupId && asset.getUploaderId() == userId && asset.getMessageId() == null
                         && asset.getMediaType() == expected && asset.getStatus().isSendable());
         if (!valid) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "보낼 수 없는 사진·동영상이 있어요. 다시 올려 주세요.");
+            throw new BusinessException(ErrorCode.MEDIA_UNAVAILABLE);
         }
         return media;
     }

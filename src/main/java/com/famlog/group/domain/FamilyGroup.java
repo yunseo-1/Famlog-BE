@@ -41,6 +41,9 @@ public class FamilyGroup extends BaseTimeEntity {
     @Column(name = "delete_scheduled_at")
     private Instant deleteScheduledAt;
 
+    @Column(name = "purged_at")
+    private Instant purgedAt;
+
     @Column(name = "created_by", nullable = false, updatable = false)
     private Long createdBy;
 
@@ -70,5 +73,13 @@ public class FamilyGroup extends BaseTimeEntity {
             status = GroupStatus.PENDING_DELETION;
             deleteScheduledAt = now.plus(grace);
         }
+    }
+
+    /** 파기: 그룹 데이터를 지운 뒤 기록용 행만 남긴다 (사양서 8.2). 이름·사진은 남기지 않는다 */
+    public void purge(Instant now) {
+        status = GroupStatus.DELETED;
+        name = "삭제된 그룹";
+        imageKey = null;
+        purgedAt = now;
     }
 }

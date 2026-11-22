@@ -23,7 +23,7 @@ import com.famlog.common.error.ErrorCode;
 import com.famlog.common.time.FamlogTime;
 import com.famlog.group.service.GroupService;
 import com.famlog.media.repository.MediaAssetRepository;
-import com.famlog.media.storage.MediaStorage;
+import com.famlog.media.service.MediaCleanupService;
 import com.famlog.user.domain.AccountDeletionRequest;
 import com.famlog.user.domain.User;
 import com.famlog.user.repository.AccountDeletionRequestRepository;
@@ -31,8 +31,6 @@ import com.famlog.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 계정 삭제·복구·파기 (사양서 4.1 ACC-01, 8.2, 8.9, 18장).
@@ -51,8 +49,6 @@ import tools.jackson.databind.json.JsonMapper;
 public class AccountDeletionService {
 
     static final int PURGE_BATCH = 50;
-    private static final TypeReference<Map<String, String>> VARIANTS = new TypeReference<>() {
-    };
 
     private final UserRepository userRepository;
     private final AccountDeletionRequestRepository requestRepository;
@@ -61,11 +57,10 @@ public class AccountDeletionService {
     private final SessionTokenService sessionTokenService;
     private final ChatService chatService;
     private final MediaAssetRepository mediaRepository;
-    private final MediaStorage storage;
+    private final MediaCleanupService mediaCleanupService;
     private final JdbcTemplate jdbcTemplate;
     private final AuditLogger auditLogger;
     private final AccountProperties properties;
-    private final JsonMapper jsonMapper;
     private final Clock clock;
 
     /** @param source APP(본인) 또는 ADMIN(웹 요청을 관리자 도구로 대신 처리) */
@@ -170,10 +165,7 @@ public class AccountDeletionService {
                 userId);
         List<Long> messageIds = new ArrayList<>();
         for (Row row : rows) {
-            storage.delete(row.key());
-            if (row.variants() != null) {
-                jsonMapper.readValue(row.variants(), VARIANTS).values().forEach(storage::delete);
-            }
+            mediaCleanupService.deleteFiles(row.key(), row.variants());
             if (row.messageId() != null && !messageIds.contains(row.messageId())) {
                 messageIds.add(row.messageId());
             }

@@ -1,7 +1,10 @@
 package com.famlog.group.repository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -17,4 +20,12 @@ public interface FamilyGroupRepository extends JpaRepository<FamilyGroup, Long> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from FamilyGroup g where g.id = :id")
     Optional<FamilyGroup> findByIdForUpdate(@Param("id") Long id);
+
+    /** 유예가 지난 삭제 예정 그룹 (파기 배치) */
+    @Query("""
+            select g.id from FamilyGroup g
+            where g.status = com.famlog.group.domain.GroupStatus.PENDING_DELETION and g.deleteScheduledAt <= :now
+            order by g.id
+            """)
+    List<Long> findPurgeDueIds(@Param("now") Instant now, Limit limit);
 }

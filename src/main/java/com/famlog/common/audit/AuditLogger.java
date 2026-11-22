@@ -31,6 +31,11 @@ public class AuditLogger {
         insert(null, action, targetType, targetId, groupId, meta);
     }
 
+    /** 서버 배치의 동작 (actor 없음) */
+    public void recordSystem(AuditAction action, String targetType, Long targetId, Long groupId, Map<String, ?> meta) {
+        insert(null, action, targetType, targetId, groupId, meta);
+    }
+
     private void insert(Long actorId, AuditAction action, String targetType, Long targetId, Long groupId,
             Map<String, ?> meta) {
         jdbcTemplate.update("""
