@@ -48,14 +48,17 @@ public class ExtractResultHandler {
             log.warn("분석 결과의 요청이 없습니다: jobId={}", jobId);
             return;
         }
-        if (job.isFinished()) {
-            return;
-        }
-        Instant now = Instant.now(clock);
         AiJob.Usage usage = new AiJob.Usage(result.get("modelVersion"), result.get("promptVersion"),
                 intOrNull(result, "inputTokens"), intOrNull(result, "outputTokens"),
                 intOrNull(result, "cacheReadTokens"), intOrNull(result, "cacheWriteTokens"),
                 intOrNull(result, "latencyMs"));
+        if (job.isFinished()) {
+            if (job.recordLateUsage(usage)) {
+                log.info("멈춘 것으로 정리한 요청의 결과가 늦게 와 토큰 수만 남깁니다: jobId={}", jobId);
+            }
+            return;
+        }
+        Instant now = Instant.now(clock);
         if ("DONE".equals(result.get("status"))) {
             JsonNode candidates = candidates(result.get("candidates"));
             if (candidates == null) {

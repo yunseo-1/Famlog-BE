@@ -28,6 +28,9 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
   pre { white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 8px; }
   #msg { margin-left: auto; color: var(--warn); }
+  .banner { padding: 8px 16px; border-bottom: 1px solid var(--line); background: #fff; }
+  .banner.WARN { background: #fff6d6; border-color: #e6c35c; }
+  .banner.OVER { background: #fde2e0; border-color: var(--warn); color: var(--warn); font-weight: 600; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -43,6 +46,7 @@
   </nav>
   <span id="msg"></span>
 </header>
+<div id="ops" class="banner" hidden></div>
 <main>
   <section id="login" class="panel">
     <div class="row">
@@ -143,10 +147,28 @@
 
   function enter() {
     $('login').hidden = true; $('tabs').hidden = false; show('reports');
+    loadOps().catch((e) => say(e.message));
+  }
+
+  // --- 운영 배너: 이번 달 AI 비용(80% 이상 노랑, 상한 빨강), 실패·대기 요청, DLQ ---
+  async function loadOps() {
+    const o = await api('GET', '/ops-summary');
+    const dead = Object.values(o.deadLetters).reduce((a, b) => a + b, 0);
+    const parts = [
+      `${o.month} AI 비용 $${o.spentUsd} / $${o.budgetUsd} (${o.percent}%)`
+        + (o.level === 'OVER' ? ' · 상한 도달: 새 분석을 멈췄어요' : o.level === 'WARN' ? ' · 경고 기준 넘음' : ''),
+      `요청 ${o.jobsThisMonth} · 실패 ${o.failedJobsThisMonth} · 대기 ${o.queuedJobs}`,
+      `DLQ ${dead}` + (dead ? ' (' + Object.entries(o.deadLetters).filter(([, n]) => n).map(([k, n]) => k + ' ' + n)
+        .join(', ') + ')' : ''),
+    ];
+    const banner = $('ops');
+    banner.textContent = parts.join('   |   ');
+    banner.className = 'banner ' + (o.level !== 'OK' ? o.level : dead ? 'WARN' : '');
+    banner.hidden = false;
   }
   function logout() {
     token = null; try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
-    $('login').hidden = false; $('tabs').hidden = true;
+    $('login').hidden = false; $('tabs').hidden = true; $('ops').hidden = true;
     for (const s of ['reports', 'holidays', 'versions', 'flags', 'audit']) $(s).hidden = true;
   }
 

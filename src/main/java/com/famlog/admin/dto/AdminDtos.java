@@ -1,5 +1,6 @@
 package com.famlog.admin.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -75,5 +76,18 @@ public final class AdminDtos {
 
     public record AuditLogItem(long id, Long actorId, String action, String targetType, Long targetId, Long groupId,
             String meta, String ip, Instant createdAt) {
+    }
+
+    /**
+     * 운영 배너.
+     *
+     * @param month       비용을 센 달 (UTC, 청구 기준 yyyy-MM)
+     * @param percent     상한 대비 비용 (%, 내림)
+     * @param level       OK, WARN(경고 비율 이상), OVER(상한 도달: 새 분석을 만들지 않음)
+     * @param queuedJobs  결과를 기다리는 AI 요청 (30분 넘으면 STALE 로 정리된다)
+     * @param deadLetters DLQ 스트림별 길이 (워커 처리 요청 2개, 서버 결과 2개)
+     */
+    public record OpsSummary(String month, BigDecimal spentUsd, BigDecimal budgetUsd, int percent, String level,
+            long jobsThisMonth, long failedJobsThisMonth, long queuedJobs, Map<String, Long> deadLetters) {
     }
 }

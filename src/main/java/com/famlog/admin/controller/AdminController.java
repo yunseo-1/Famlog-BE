@@ -18,12 +18,14 @@ import com.famlog.admin.dto.AdminDtos.AddHolidayRequest;
 import com.famlog.admin.dto.AdminDtos.AdminHoliday;
 import com.famlog.admin.dto.AdminDtos.AuditLogItem;
 import com.famlog.admin.dto.AdminDtos.FeatureFlagItem;
+import com.famlog.admin.dto.AdminDtos.OpsSummary;
 import com.famlog.admin.dto.AdminDtos.ReportDetail;
 import com.famlog.admin.dto.AdminDtos.ReportPage;
 import com.famlog.admin.dto.AdminDtos.ResolveReportRequest;
 import com.famlog.admin.dto.AdminDtos.ResolveReportResponse;
 import com.famlog.admin.dto.AdminDtos.UpdateAppVersionRequest;
 import com.famlog.admin.dto.AdminDtos.UpdateFeatureFlagRequest;
+import com.famlog.admin.service.AdminOpsService;
 import com.famlog.admin.service.AdminReportService;
 import com.famlog.admin.service.AdminSettingsService;
 import com.famlog.common.appversion.AppVersions.AppVersion;
@@ -46,6 +48,7 @@ public class AdminController {
     private final AdminReportService reportService;
     private final AdminSettingsService settingsService;
     private final AccountDeletionService accountDeletionService;
+    private final AdminOpsService opsService;
 
     @Operation(summary = "신고 목록", description = "아동 안전 먼저, 그다음 최신 순. 콘텐츠는 넣지 않는다")
     @GetMapping("/reports")
@@ -116,6 +119,12 @@ public class AdminController {
     void deleteAccount(@PathVariable long userId, @RequestBody(required = false) AdminDeleteAccountRequest request) {
         accountDeletionService.request(userId, request != null && Boolean.TRUE.equals(request.deleteMedia()),
                 AccountDeletionRequest.SOURCE_ADMIN);
+    }
+
+    @Operation(summary = "운영 배너", description = "이번 달(UTC) AI 비용·상한·비율·단계(OK/WARN/OVER), 실패·대기 요청 수, DLQ 길이")
+    @GetMapping("/ops-summary")
+    OpsSummary opsSummary() {
+        return opsService.summary();
     }
 
     @GetMapping("/audit-logs")

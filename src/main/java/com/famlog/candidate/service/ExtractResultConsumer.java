@@ -14,6 +14,9 @@ import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer.StreamMessageListenerContainerOptions;
 import org.springframework.stereotype.Component;
 
+import com.famlog.common.stream.PendingReclaimer;
+import com.famlog.common.stream.ReclaimableStream;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -22,20 +25,22 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-public class ExtractResultConsumer implements SmartLifecycle {
+public class ExtractResultConsumer implements SmartLifecycle, ReclaimableStream {
 
     private final RedisConnectionFactory connectionFactory;
     private final StringRedisTemplate redis;
     private final ExtractResultHandler handler;
     private final AiProperties.Streams streams;
     private final String consumerName = "api-" + UUID.randomUUID();
+    private final PendingReclaimer reclaimer;
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
 
     public ExtractResultConsumer(RedisConnectionFactory connectionFactory, StringRedisTemplate redis,
-            ExtractResultHandler handler, AiProperties properties) {
+            ExtractResultHandler handler, PendingReclaimer reclaimer, AiProperties properties) {
         this.connectionFactory = connectionFactory;
         this.redis = redis;
         this.handler = handler;
+        this.reclaimer = reclaimer;
         this.streams = properties.streams();
     }
 
@@ -58,6 +63,13 @@ public class ExtractResultConsumer implements SmartLifecycle {
                     redis.opsForStream().delete(message);
                 });
         container.start();
+    }
+
+    /** 처리 중 서버가 죽었거나 반영이 실패해 대기 목록에 남은 결과를 다시 처리한다 (3번이면 DLQ) */
+    @Override
+    public int reclaimPending() {
+        return reclaimer.reclaim(streams.results(), streams.resultsGroup(), consumerName, "jobId", true,
+                handler::apply);
     }
 
     @Override

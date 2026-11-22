@@ -69,3 +69,41 @@ def test_형식이_잘못된_요청은_재시도하지_않고_DLQ로_보낸다()
 
 def failing(job):
     raise ConnectionError("s3 down")
+
+
+def test_처리_중_죽은_워커가_남긴_요청은_회수해_다시_처리한다():
+    redis = FakeRedis()
+    consumer = MediaConsumer(redis, SETTINGS, lambda job: MediaResult(media_id=job.media_id, status="READY"))
+    redis.add_pending(SETTINGS.jobs_stream, "5-0", fields(), times_delivered=1)
+
+    assert consumer.reclaim_once() == 1
+
+    [result] = redis.entries(SETTINGS.results_stream)
+    assert (result["mediaId"], result["status"]) == ("7", "READY")
+    assert redis.acked == ["5-0"]
+
+
+def test_계속_워커를_멈추게_하는_요청은_다시_처리하지_않고_DLQ로_보내고_FAILED를_알린다():
+    redis = FakeRedis()
+    calls = []
+    consumer = MediaConsumer(redis, SETTINGS, lambda job: calls.append(job))
+    redis.add_pending(SETTINGS.jobs_stream, "5-0", fields(), times_delivered=SETTINGS.max_attempts)
+
+    consumer.reclaim_once()
+
+    assert calls == []
+    [dead] = redis.entries(SETTINGS.dlq_stream)
+    assert (dead["mediaId"], dead["error"]) == ("7", "STUCK")
+    [result] = redis.entries(SETTINGS.results_stream)
+    assert (result["status"], result["reason"]) == ("FAILED", "PROCESSING_FAILED")
+    assert redis.acked == ["5-0"]
+
+
+def test_스트림에서_이미_지워진_대기_항목은_ACK만_한다():
+    redis = FakeRedis()
+    consumer = MediaConsumer(redis, SETTINGS, failing)
+    redis.add_pending(SETTINGS.jobs_stream, "5-0", None, times_delivered=1)
+
+    assert consumer.reclaim_once() == 0
+    assert redis.acked == ["5-0"]
+    assert redis.entries(SETTINGS.results_stream) == []
