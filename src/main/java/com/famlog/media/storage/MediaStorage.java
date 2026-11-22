@@ -1,6 +1,7 @@
 package com.famlog.media.storage;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import com.famlog.media.service.MediaProperties;
 
 import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -41,6 +43,20 @@ public class MediaStorage {
         GetObjectRequest request = GetObjectRequest.builder().bucket(bucket()).key(key).build();
         return toUri(presigner.presignGetObject(builder -> builder.signatureDuration(ttl).getObjectRequest(request))
                 .url().toString());
+    }
+
+    /** 받을 때 저장할 파일 이름을 붙인 GET URL (내보내기 ZIP) */
+    public URI presignDownload(String key, Duration ttl, String fileName) {
+        GetObjectRequest request = GetObjectRequest.builder().bucket(bucket()).key(key)
+                .responseContentDisposition("attachment; filename=\"" + fileName + "\"").build();
+        return toUri(presigner.presignGetObject(builder -> builder.signatureDuration(ttl).getObjectRequest(request))
+                .url().toString());
+    }
+
+    /** 서버가 만든 파일을 올린다 (내보내기 ZIP) */
+    public void putFile(String key, Path file, String contentType) {
+        s3.putObject(PutObjectRequest.builder().bucket(bucket()).key(key).contentType(contentType).build(),
+                RequestBody.fromFile(file));
     }
 
     /** 올라온 파일 크기. 없으면 empty */

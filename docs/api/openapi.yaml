@@ -2508,6 +2508,76 @@ paths:
       summary: 현재 그룹 바꾸기
       tags:
       - current-group-controller
+  /api/v1/users/me/data-exports:
+    get:
+      description: 최근 요청 최신순 5개. 다운로드 링크는 상세 조회에서 받는다
+      operationId: listExports
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExportListResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 데이터 내보내기 목록
+      tags:
+      - data-export-controller
+    post:
+      description: "프로필·그룹·내가 쓴 메시지·내가 올린 사진 목록(원본 링크)·일정·할 일·장소·동의 내역을 ZIP(JSON)으\
+        로 만든다. 보통 몇 분 안에 준비되고, 준비되면 푸시(type=DATA_EXPORT_READY, exportId)와 /user/queue/events\
+        \ 의 data-export.ready {id} 로 알린다. 진행 중인 요청이 있으면 그 요청을 돌려준다. 준비된 지 24시간이 안\
+        \ 됐으면 429 RATE_LIMITED (실패한 요청은 세지 않는다)"
+      operationId: requestExport
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExportResponse"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 데이터 내보내기 요청
+      tags:
+      - data-export-controller
+  /api/v1/users/me/data-exports/{exportId}:
+    get:
+      description: READY 면 10분짜리 downloadUrl 과 fileName 을 준다(조회할 때마다 새로). ZIP 과 그
+        안의 원본 링크는 expiresAt(준비 후 7일)에 만료된다. 다른 사람의 요청이면 404
+      operationId: getExport
+      parameters:
+      - in: path
+        name: exportId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExportResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 내 데이터 내보내기 상태
+      tags:
+      - data-export-controller
   /api/v1/users/me/notification-settings:
     get:
       description: 미리보기 숨기기·방해 금지 시간 (모든 그룹에 적용)
@@ -3201,6 +3271,44 @@ components:
           format: int64
       required:
       - groupId
+    DataExportListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataExportResponse"
+    DataExportResponse:
+      type: object
+      properties:
+        downloadUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+        fileName:
+          type: string
+        id:
+          type: integer
+          format: int64
+        readyAt:
+          type: string
+          format: date-time
+        requestedAt:
+          type: string
+          format: date-time
+        sizeBytes:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - PROCESSING
+          - READY
+          - FAILED
+          - EXPIRED
     DecisionResponse:
       type: object
       properties:

@@ -30,6 +30,7 @@ import com.famlog.notification.push.PushData;
 import com.famlog.notification.push.PushProperties;
 import com.famlog.notification.repository.NotificationSettingsRepository;
 import com.famlog.schedule.event.ScheduleReminderDue;
+import com.famlog.user.event.DataExportReady;
 import com.famlog.user.domain.User;
 import com.famlog.user.repository.UserRepository;
 
@@ -135,6 +136,19 @@ class PushComposer {
         if (event.deviceName() != null && !event.deviceName().isBlank()) {
             data.put(PushData.DEVICE_NAME, event.deviceName());
         }
+        data.put(PushData.SENT_AT, sentAt(Instant.now(clock)));
+        data.put(PushData.SILENT, Boolean.toString(settingsOf(List.of(event.userId())).get(event.userId())
+                .isQuietAt(seoulNow())));
+        return Map.of(event.userId(), data);
+    }
+
+    /** 내 데이터 내보내기 준비 (ACC-02): 그 사용자의 모든 기기로. 내용은 넣지 않고 id 만 */
+    @Transactional(readOnly = true)
+    public Map<Long, Map<String, String>> dataExportReady(DataExportReady event) {
+        Map<String, String> data = new HashMap<>();
+        data.put(PushData.TYPE, PushData.DATA_EXPORT_READY);
+        data.put(PushData.CHANNEL, PushData.CHANNEL_SYSTEM);
+        data.put(PushData.EXPORT_ID, Long.toString(event.exportId()));
         data.put(PushData.SENT_AT, sentAt(Instant.now(clock)));
         data.put(PushData.SILENT, Boolean.toString(settingsOf(List.of(event.userId())).get(event.userId())
                 .isQuietAt(seoulNow())));

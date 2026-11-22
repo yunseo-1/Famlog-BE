@@ -103,7 +103,7 @@ public final class ChatDtos {
     /**
      * /sub/groups/{groupId}: message.created, message.deleted, read.updated, reaction.updated, media.updated,
      * candidate.created, candidate.resolved
-     * /user/queue/events: message.created(재전송 확인), error, session.revoked
+     * /user/queue/events: message.created(재전송 확인), error, session.revoked, data-export.ready
      */
     public record ChatEvent(String type, Object data) {
 
@@ -117,6 +117,8 @@ public final class ChatDtos {
         public static final String CANDIDATE_RESOLVED = "candidate.resolved";
         public static final String ERROR = "error";
         public static final String SESSION_REVOKED = "session.revoked";
+        /** 내 데이터 내보내기 ZIP 이 준비됐다. data = {id} */
+        public static final String DATA_EXPORT_READY = "data-export.ready";
     }
 
     /** 앱은 seq가 (fromSeq, lastReadSeq] 이고 보낸 사람이 userId가 아닌 메시지의 unreadCount를 1씩 뺀다 */

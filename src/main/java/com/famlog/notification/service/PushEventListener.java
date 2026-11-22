@@ -12,6 +12,7 @@ import com.famlog.auth.service.NewDeviceLoggedIn;
 import com.famlog.chat.event.MessagePosted;
 import com.famlog.group.event.GroupMemberEvents.MemberLeft;
 import com.famlog.schedule.event.ScheduleReminderDue;
+import com.famlog.user.event.DataExportReady;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  * <li>내보내짐 → 내보내진 본인</li>
  * <li>새 기기 로그인 → 그 사용자의 다른 기기</li>
  * <li>일정 리마인드 → 참여 구성원</li>
+ * <li>내 데이터 내보내기 준비 → 요청한 본인의 모든 기기</li>
  * </ul>
  * 채팅방을 보고 있는지는 서버가 따지지 않는다. 앱이 화면에 있으면 앱이 표시하지 않는다 (그때는 STOMP로 이미 받았다).
  */
@@ -59,6 +61,11 @@ class PushEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     void onScheduleReminder(ScheduleReminderDue event) {
         submit(() -> composer.scheduleReminder(event), null);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    void onDataExportReady(DataExportReady event) {
+        submit(() -> composer.dataExportReady(event), null);
     }
 
     private void submit(Supplier<Map<Long, Map<String, String>>> compose, Long excludeSessionId) {

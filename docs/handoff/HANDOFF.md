@@ -123,6 +123,7 @@
 | 11/20 | AI 안내 `refusal` 문구를 앱 실제 경로(채팅방 메뉴 > 그룹 설정)로 고침. 출시 전이라 version 1.0 유지, S22 보관 문구 확정 때 올린다 | 앱 요청, 사용자 결정 |
 | 11/20 | S20-2: 신고 사유 8종(OTHER는 상세 필수), 조치는 메시지·사진 숨김과 AI 후보 무시(사용자 정지는 v1.1), 처리 결과 알림 없음. 기능 플래그 3개(DB 값 없으면 설정값). 강제 업데이트 426을 지금 넣음(ANDROID 최소 0.0.0). 관리자 인증은 환경변수 토큰 + 정적 페이지. 공지에 `noticeUpdatedAt`(앱 요청) | 사용자 결정 |
 | 11/20 | S20-3: 복구는 로그인 403 `ACCOUNT_PENDING_DELETION` → `restore:true` 재로그인(사양서 `/users/me/restore` 대신). 유예 중 그룹 자격 유지, 혼자인 그룹은 함께 삭제 예정·복구 시 되살림, 사진·동영상 삭제는 선택(위치는 항상 삭제). 웹은 정적 안내 + 이메일 → 관리자 대리 삭제. 삭제 예정 그룹의 실제 파기 배치는 S20-5 | 사용자 결정 |
+| 11/22 | S20-4: 내보내기는 서버 배치가 ZIP(JSON + 7일 원본 링크)을 만들어 S3에 둔다. 메시지·사진은 나간 그룹 포함, 일정·할 일·장소는 지금 속한 그룹만. 할 일·동의 내역도 넣음. 준비 후 24시간 안 재요청 429(실패는 제외), 실패 3번 재시도. 웹 삭제 안내에 설정 진입점(채팅 탭 톱니바퀴) 추가 | 사용자 결정 |
 
 ## 3. Figma 상태
 
@@ -188,7 +189,8 @@
 | S19-2 | ARC-04·6.4 기존 일정 변경·할 일 완료 후보(`target_ref`), 프롬프트 extract_v2, 평가셋 60건 | ✅ PR #24 |
 | S20-1 | SET-01 AI 분석 안내·동의(고지 확인), 철회 시 전체 분석 제외, 관리자의 분석 제외 보기 | ✅ PR #25·#26 |
 | S20-2 | MOD-01 신고 API, 최소 관리자 도구(신고·공휴일·앱 버전·기능 플래그·감사 로그), /app/config·426 | ✅ PR #27 |
-| S20-3 | ACC-01 계정 삭제·복구·30일 파기 배치, WEB-01 웹 삭제 안내, 관리자 대리 삭제 | ✅ 이번 PR |
+| S20-3 | ACC-01 계정 삭제·복구·30일 파기 배치, WEB-01 웹 삭제 안내, 관리자 대리 삭제 | ✅ PR #28 |
+| S20-4 | ACC-02 내 데이터 내보내기(ZIP·7일 링크·준비 알림) | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -462,6 +464,21 @@
 - 앱 표시: 지금 구성원 목록에 없는 보낸 사람·작성자는 "나간 구성원", 탈퇴한 사람은 서버가 닉네임을 "탈퇴한 구성원"으로 준다
 
 **웹** `GET /account-deletion` (로그인 없음, 정적): 앱 경로·지우는 것/남는 것·30일 유예·이메일 요청(kimyunseo112@gmail.com). 이메일 요청은 본인 확인 뒤 관리자 도구 `POST /admin/api/users/{userId}/deletion {deleteMedia?}`로 같은 흐름 처리 (source ADMIN)
+
+### 내 데이터 내보내기 (S20-4, ACC-02, 앱 S20 참고)
+
+**요청** `POST /users/me/data-exports` → 202 `{id, status: REQUESTED, requestedAt, ...}`
+- 진행 중(REQUESTED·PROCESSING)인 요청이 있으면 그 요청을 그대로 돌려준다
+- 준비된 지 24시간이 안 됐으면 429 `RATE_LIMITED` (메시지 그대로 표시). FAILED는 세지 않아 바로 다시 요청할 수 있다
+
+**준비 알림**: 서버 배치(1분마다)가 만들고, 끝나면 푸시 `{type: DATA_EXPORT_READY, channel: SYSTEM, exportId, sentAt, silent}`(내용 없음)와 `/user/queue/events`의 `data-export.ready {id}`. 실패하면 3번까지 다시 시도한 뒤 FAILED. 삭제 예정 계정은 FAILED
+
+**상태·다운로드** `GET /users/me/data-exports/{id}` → `{id, status, requestedAt, readyAt, expiresAt, sizeBytes, downloadUrl, fileName}`
+- READY일 때만 `downloadUrl`(10분, 조회할 때마다 새로)과 `fileName`(famlog-export-yyyyMMdd.zip). 링크는 `Content-Disposition: attachment`
+- `expiresAt`(준비 후 7일)이 지나면 파일을 지우고 EXPIRED. 다른 사람의 요청은 404
+- `GET /users/me/data-exports`: 최근 5개 최신순 (`downloadUrl` 없음). 앱 화면 상태 복원용
+
+**ZIP**: README.txt, profile·groups·messages·media·schedules·todos·places·consents.json (시각 +09:00). media.json의 원본 링크는 ZIP 만료 시각까지. 다른 가족의 닉네임은 넣지 않는다. 감사 로그는 요청·준비(건수만)·첫 다운로드. 계정 파기 때 남은 파일도 지운다
 
 ### 다음 단계로 넘긴 것
 

@@ -13,6 +13,8 @@ famlog:
     token: test-admin-token
   account:
     purge-enabled: false
+  data-export:
+    ticker-enabled: false
   schedule:
     reminder-enabled: false
   ai:
