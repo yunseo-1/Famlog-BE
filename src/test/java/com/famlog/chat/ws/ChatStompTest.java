@@ -208,6 +208,20 @@ class ChatStompTest extends ChatIntegrationTest {
                 .isZero();
     }
 
+    @Test
+    void 정리된_사진으로_보내면_MEDIA_UNAVAILABLE과_clientMessageId를_알린다() throws Exception {
+        try (StompTestClient momClient = StompTestClient.connect(port, token(mom))) {
+            String id = UUID.randomUUID().toString();
+            momClient.send("/pub/groups/" + groupId + "/messages",
+                    "{\"clientMessageId\":\"%s\",\"type\":\"IMAGE\",\"mediaIds\":[%d]}".formatted(id, Long.MAX_VALUE));
+
+            String event = momClient.nextUserEvent();
+            assertThat(read(event, "$.type")).isEqualTo("error");
+            assertThat(read(event, "$.data.code")).isEqualTo("MEDIA_UNAVAILABLE");
+            assertThat(read(event, "$.data.clientMessageId")).isEqualTo(id);
+        }
+    }
+
     // --- CHAT-04 읽음 ---
 
     @Test

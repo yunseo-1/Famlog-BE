@@ -41,6 +41,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import com.famlog.chat.domain.MessageType;
 import com.famlog.chat.dto.ChatDtos.MessageResponse;
 import com.famlog.common.error.BusinessException;
+import com.famlog.common.error.ErrorCode;
 import com.famlog.media.service.MediaProperties;
 import com.famlog.media.storage.MediaStorage;
 import com.famlog.support.ChatIntegrationTest;
@@ -199,21 +200,28 @@ class MediaApiTest extends ChatIntegrationTest {
         long dadImage = uploadedImage(dad);
         long pending = pendingImage(mom);
         long otherGroupImage = uploadedImageIn(stranger, otherGroupId);
+        long cleanedUp = Long.MAX_VALUE; // 정리 배치가 지운 미디어
 
-        List<List<Long>> invalid = List.of(List.of(video), List.of(dadImage), List.of(pending),
-                List.of(otherGroupImage), List.of(image, image), List.of());
-        for (List<Long> ids : invalid) {
+        // 붙일 수 없는 미디어: 앱은 MEDIA_UNAVAILABLE 을 받으면 다시 올린다
+        for (List<Long> ids : List.of(List.of(video), List.of(dadImage), List.of(pending), List.of(otherGroupImage),
+                List.of(cleanedUp))) {
             assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.IMAGE, ids)).as(ids.toString())
-                    .isInstanceOf(BusinessException.class);
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEDIA_UNAVAILABLE);
+        }
+        assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.VIDEO, List.of(image)))
+                .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEDIA_UNAVAILABLE);
+        // 형식 오류는 VALIDATION_FAILED
+        for (List<Long> ids : List.of(List.of(image, image), List.<Long>of())) {
+            assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.IMAGE, ids)).as(ids.toString())
+                    .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
         }
         assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.VIDEO, List.of(video, uploadedVideo(mom))))
-                .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.VIDEO, List.of(image)))
-                .isInstanceOf(BusinessException.class);
+                .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
 
         sendMedia(groupId, mom, MessageType.IMAGE, List.of(image));
-        assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.IMAGE, List.of(image)))
-                .as("이미 보낸 사진").isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> sendMedia(groupId, mom, MessageType.IMAGE, List.of(image))).as("이미 보낸 사진")
+                .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.MEDIA_UNAVAILABLE);
         assertThat(sendMedia(groupId, mom, MessageType.VIDEO, List.of(video)).media()).hasSize(1);
     }
 
