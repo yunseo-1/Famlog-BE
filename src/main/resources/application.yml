@@ -132,7 +132,7 @@ famlog:
   ai:
     enabled: true          # 전체 끄기 스위치
     ticker-enabled: true   # 5초마다 분석 시각이 된 방을 꺼낸다. 테스트는 끄고 직접 부른다
-    pause: 30s             # 규칙 필터에 걸린 뒤 대화가 멈추면
+    pause: 5s              # 규칙 필터에 걸린 뒤 대화가 멈추면
     batch-idle: 10m        # 보조 분석: 대화가 멈추면
     batch-size: 30         # 보조 분석: 분석 안 된 메시지가 쌓이면 바로
     context-size: 20       # 앞 맥락
