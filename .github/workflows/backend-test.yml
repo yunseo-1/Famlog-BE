@@ -31,6 +31,10 @@ jobs:
       - name: Test
         run: ./gradlew test --no-daemon
 
+      # SEC-T9: 테스트 로그에 토큰·개인정보 패턴이 없는지
+      - name: Scan test logs
+        run: sh scripts/scan-logs.sh build/test-results/test
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v5
@@ -50,4 +54,7 @@ jobs:
         run: docker build --target test -t famlog-worker-test worker
 
       - name: Test
-        run: docker run --rm famlog-worker-test
+        run: docker run --rm famlog-worker-test 2>&1 | tee worker-test.log
+
+      - name: Scan test logs
+        run: sh scripts/scan-logs.sh worker-test.log
