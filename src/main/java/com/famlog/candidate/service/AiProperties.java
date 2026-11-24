@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param enabled        전체 끄기 스위치. 끄면 어떤 메시지도 분석 대상으로 넘기지 않는다
  * @param tickerEnabled  분석 시각이 된 방을 5초마다 꺼내는 스케줄러. 테스트는 끄고 직접 부른다
- * @param pause          규칙 필터에 걸린 뒤 대화가 이만큼 멈추면 분석 (30초)
+ * @param pause          규칙 필터에 걸린 뒤 대화가 이만큼 멈추면 분석 (5초)
  * @param batchIdle      규칙 필터에 안 걸린 메시지만 있을 때 대화가 이만큼 멈추면 보조 분석 (10분)
  * @param batchSize      분석 안 된 메시지가 이만큼 쌓이면 바로 보조 분석 (30개)
  * @param contextSize    분석 구간 앞 맥락 최대 개수 (20개)
@@ -24,7 +24,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record AiProperties(
         @DefaultValue("true") boolean enabled,
         @DefaultValue("true") boolean tickerEnabled,
-        @DefaultValue("30s") Duration pause,
+        @DefaultValue("5s") Duration pause,
         @DefaultValue("10m") Duration batchIdle,
         @DefaultValue("30") int batchSize,
         @DefaultValue("20") int contextSize,

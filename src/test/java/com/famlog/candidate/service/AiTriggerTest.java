@@ -45,14 +45,14 @@ class AiTriggerTest extends ChatIntegrationTest {
     }
 
     @Test
-    void 규칙에_걸린_메시지는_대화가_30초_멈춘_뒤_분석_요청이_된다() {
+    void 규칙에_걸린_메시지는_대화가_5초_멈춘_뒤_분석_요청이_된다() {
         long enabledSeq = roomLastSeq(family.groupId());
         long id = send(family.groupId(), family.mom(), "이번 토요일 11시에 할머니 댁 가자").id();
 
-        triggerService.runDue(Instant.now().plusSeconds(10));
+        triggerService.runDue(Instant.now().plusSeconds(2));
         assertThat(jobs()).isEmpty();
 
-        triggerService.runDue(Instant.now().plus(Duration.ofSeconds(31)));
+        triggerService.runDue(Instant.now().plus(Duration.ofSeconds(6)));
         Map<String, Object> job = onlyJob();
         assertThat(job).containsEntry("trigger", "RULE").containsEntry("message_count", 1)
                 .containsEntry("from_seq", enabledSeq).containsEntry("to_seq", roomLastSeq(family.groupId()))
