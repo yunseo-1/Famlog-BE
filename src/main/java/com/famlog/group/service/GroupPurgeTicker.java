@@ -8,6 +8,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class GroupPurgeTicker {
 
+    private final FamlogMetrics metrics;
     private final GroupPurgeService purgeService;
     private final Clock clock;
 
@@ -35,6 +38,7 @@ class GroupPurgeTicker {
                     purged++;
                 }
             } catch (RuntimeException e) {
+                metrics.batchFailure("group-purge");
                 log.warn("그룹 파기 실패: groupId={}, error={}", groupId, e.getClass().getSimpleName());
             }
         }

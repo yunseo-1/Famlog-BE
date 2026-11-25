@@ -58,3 +58,22 @@ jobs:
 
       - name: Scan test logs
         run: sh scripts/scan-logs.sh worker-test.log
+
+  # 관측 설정 (S21-2): Prometheus 설정·알림 규칙 문법과 규칙 테스트, Alertmanager 설정
+  monitoring-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check Prometheus config and alert rules
+        run: |
+          docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus:ro" --entrypoint promtool \
+            prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus:ro" -w /etc/prometheus --entrypoint promtool \
+            prom/prometheus:v3.5.0 test rules alerts_test.yml
+
+      - name: Check Alertmanager config
+        run: |
+          docker run --rm -v "$PWD/infra/alertmanager:/etc/alertmanager:ro" --entrypoint amtool \
+            prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml

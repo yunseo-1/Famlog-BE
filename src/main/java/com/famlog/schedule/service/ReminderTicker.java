@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class ReminderTicker {
 
+    private final FamlogMetrics metrics;
     private final ReminderService reminderService;
     private final Clock clock;
 
@@ -30,6 +33,7 @@ class ReminderTicker {
         try {
             reminderService.sendDue(Instant.now(clock));
         } catch (RuntimeException e) {
+            metrics.batchFailure("reminder");
             log.warn("일정 리마인드를 처리하지 못했습니다: error={}", e.getClass().getSimpleName());
         }
     }

@@ -1,0 +1,11 @@
+# Alertmanager. 알림을 받을 곳(이메일·Discord 등)은 S22 운영 서버 단계에서 정한다 (2026-11-24 사용자 결정).
+# 지금은 웹 화면(http://localhost:9093)에서만 본다. 받을 곳을 정하면 receivers 에 넣고, 비밀값은 infra/.env 에 둔다
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default

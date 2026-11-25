@@ -30,13 +30,23 @@ server:
 
 # Actuator: health만 공개, 상세 정보 숨김 (사양서 9.6)
 management:
+  # 관리 포트 (사양서 9.6, 12장): health·prometheus 는 이 포트로만. 운영에서는 내부망에만 열고 Nginx 로 내보내지 않는다.
+  # 앱 포트에는 상태 확인용 /livez·/readyz 만 둔다
+  server:
+    port: ${MANAGEMENT_PORT:8091}
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, prometheus
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
+        add-additional-paths: true
+  metrics:
+    tags:
+      application: famlog-api
 
 springdoc:
   api-docs:

@@ -32,6 +32,9 @@ public class SecurityConfig {
             "/error",
             "/actuator/health",
             "/actuator/health/**",
+            "/actuator/prometheus", // 관리 포트에만 있다 (앱 포트에서는 404)
+            "/livez",
+            "/readyz",
             "/v3/api-docs",
             "/v3/api-docs.yaml",
             "/v3/api-docs/**",

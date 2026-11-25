@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class StreamReclaimTicker {
 
+    private final FamlogMetrics metrics;
     private final List<ReclaimableStream> streams;
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
@@ -26,6 +29,7 @@ class StreamReclaimTicker {
             try {
                 stream.reclaimPending();
             } catch (RuntimeException e) {
+                metrics.batchFailure("stream-reclaim");
                 log.warn("대기 메시지 회수 실패: error={}", e.getClass().getSimpleName());
             }
         }

@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class DataExportTicker {
 
+    private final FamlogMetrics metrics;
     private final DataExportService exportService;
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
@@ -38,6 +41,7 @@ class DataExportTicker {
                 exportService.process(next.get());
             }
         } catch (RuntimeException e) {
+            metrics.batchFailure("data-export");
             log.warn("내보내기 배치 실패: error={}", e.getClass().getSimpleName());
         }
     }

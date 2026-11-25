@@ -1,0 +1,20 @@
+# Prometheus (사양서 12장 관측, 9.8 보안 알림). docker compose --profile monitoring 으로만 뜬다.
+# 로컬: API 는 호스트에서 bootRun 으로 돌고 관리 포트 8091 의 /actuator/prometheus 를 긁는다.
+# 운영(S22): 같은 docker 네트워크의 api:8091 로 바꾼다 (관리 포트는 외부에 열지 않는다)
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: famlog-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8091"]

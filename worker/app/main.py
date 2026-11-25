@@ -16,6 +16,11 @@ from .storage import Storage
 
 log = logging.getLogger("famlog.worker")
 
+# 살아 있음 신호: 30초마다 90초 만료 키 (서버 OpsMetrics.WORKER_ALIVE_PATTERN 과 같아야 한다)
+ALIVE_KEY_PREFIX = "famlog:worker:alive:"
+ALIVE_INTERVAL_SECONDS = 30
+ALIVE_TTL_SECONDS = 90
+
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
@@ -47,9 +52,13 @@ def main() -> None:
     log.info("워커 시작: media=%s ai=%s llm=%s", settings.jobs_stream, settings.ai_jobs_stream,
              settings.llm_provider)
     next_reclaim = 0.0
+    next_alive = 0.0
     while running:
         HEARTBEAT.touch()
         try:
+            if time.monotonic() >= next_alive:  # 서버 게이지 famlog.worker.alive (워커 다운 알림)가 센다
+                client.set(ALIVE_KEY_PREFIX + settings.consumer, "1", ex=ALIVE_TTL_SECONDS)
+                next_alive = time.monotonic() + ALIVE_INTERVAL_SECONDS
             if time.monotonic() >= next_reclaim:  # 시작할 때와 주기적으로 멈춘 대기 메시지를 회수한다
                 consumer.reclaim_once()
                 ai_consumer.reclaim_once()
