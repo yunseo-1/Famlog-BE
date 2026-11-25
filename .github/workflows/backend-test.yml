@@ -59,6 +59,18 @@ jobs:
       - name: Scan test logs
         run: sh scripts/scan-logs.sh worker-test.log
 
+  # 비밀 스캔 (사양서 9.4, S22-1): 저장소 전체 이력에 키·토큰이 없는지. 테스트용 가짜 값 예외는 .gitleaksignore
+  secret-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 git /repo --redact --no-banner
+
   # 관측 설정 (S21-2): Prometheus 설정·알림 규칙 문법과 규칙 테스트, Alertmanager 설정
   monitoring-config:
     runs-on: ubuntu-24.04
@@ -77,3 +89,19 @@ jobs:
         run: |
           docker run --rm -v "$PWD/infra/alertmanager:/etc/alertmanager:ro" --entrypoint amtool \
             prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+
+      # 운영 설정 (S22-1): 같은 규칙을 운영 대상(api·node-exporter)으로 읽는지, Discord 수신 설정
+      - name: Check production monitoring config
+        run: |
+          docker run --rm -v "$PWD/infra/prod/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            -v "$PWD/infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro" --entrypoint promtool \
+            prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm -v "$PWD/infra/prod/alertmanager:/etc/alertmanager:ro" --entrypoint amtool \
+            prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+
+      - name: Check production compose
+        run: |
+          cp infra/prod/.env.example /tmp/prod.env
+          echo FAMLOG_IMAGE_TAG=ci >> /tmp/prod.env
+          docker compose -f infra/prod/docker-compose.yml --env-file /tmp/prod.env config --quiet
+          for f in infra/prod/scripts/*.sh infra/scripts/*.sh; do sh -n "$f"; done

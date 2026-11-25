@@ -1,0 +1,185 @@
+# FamLog 운영 구성 (사양서 13장 MVP: VM 1대 + Docker Compose, S22-1). 절차는 docs/runbooks/deploy.md
+#   실행: infra/prod/scripts/deploy.sh <커밋 SHA>   (이미지 태그를 정하고 pull → up 한다)
+#   비밀은 서버의 /opt/famlog/.env (infra/prod/.env.example 형식, 저장소에 넣지 않는다)
+# 밖으로는 Nginx 80·443 만 연다. API 는 127.0.0.1:8080 에만 열어 SSM 터널로 관리자 도구를 쓴다 (사양서 9.6).
+# 파일은 실제 S3 를 쓴다: 접근 키 없이 EC2 인스턴스 역할로 접근한다 (endpoint·키를 비운다).
+name: famlog-prod
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  postgres:
+    image: ${FAMLOG_IMAGE_REPO}/famlog-postgres:${FAMLOG_IMAGE_TAG}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    shm_size: 256m
+    restart: unless-stopped
+    <<: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "256mb",
+              "--maxmemory-policy", "noeviction"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    <<: *logging
+
+  api:
+    image: ${FAMLOG_IMAGE_REPO}/famlog-api:${FAMLOG_IMAGE_TAG}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      FAMLOG_AUTH_JWT_ACTIVE_KID: ${JWT_ACTIVE_KID}
+      FAMLOG_AUTH_JWT_KEYS_0_KID: ${JWT_ACTIVE_KID}
+      FAMLOG_AUTH_JWT_KEYS_0_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      FAMLOG_AUTH_JWT_KEYS_0_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      FAMLOG_SOCIAL_KAKAO_APP_ID: ${KAKAO_APP_ID:-}
+      FAMLOG_SOCIAL_GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_ID:-}
+      FAMLOG_PLACE_KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      FAMLOG_MEDIA_S3_BUCKET: ${S3_BUCKET_MEDIA}
+      FAMLOG_MEDIA_S3_REGION: ${S3_REGION:-ap-northeast-2}
+      # AWS S3 면 비운다 (인스턴스 역할). S3 호환 저장소를 쓰거나 로컬에서 시험할 때만 채운다
+      FAMLOG_MEDIA_S3_ENDPOINT: ${S3_ENDPOINT:-}
+      FAMLOG_MEDIA_S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-}
+      FAMLOG_MEDIA_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      FAMLOG_MEDIA_S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      FAMLOG_PUSH_CREDENTIALS_PATH: /run/secrets/firebase-adminsdk.json
+      FAMLOG_ADMIN_TOKEN: ${FAMLOG_ADMIN_TOKEN}
+      FAMLOG_GROUP_INVITE_LINK_BASE_URL: https://${FAMLOG_DOMAIN}/invite/
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError
+    volumes:
+      - ${FAMLOG_SECRETS_DIR:-/opt/famlog/secrets}/firebase-adminsdk.json:/run/secrets/firebase-adminsdk.json:ro
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+    mem_limit: 1536m
+    stop_grace_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    <<: *logging
+
+  worker:
+    image: ${FAMLOG_IMAGE_REPO}/famlog-worker:${FAMLOG_IMAGE_TAG}
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      S3_REGION: ${S3_REGION:-ap-northeast-2}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    mem_limit: 768m
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    <<: *logging
+
+  # TLS 종료·리버스 프록시 (사양서 9.4: TLS 1.2 이상, HSTS). 설정은 nginx/templates 에서 FAMLOG_DOMAIN 을 넣어 만든다
+  nginx:
+    image: nginx:1.28.0-alpine
+    environment:
+      FAMLOG_DOMAIN: ${FAMLOG_DOMAIN}
+      NGINX_ENVSUBST_FILTER: ^FAMLOG_
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - acme-webroot:/var/www/acme:ro
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    <<: *logging
+
+  # Let's Encrypt 인증서 발급·갱신. 상주하지 않고 스크립트·cron 이 run 으로 부른다 (scripts/init-cert.sh, renew-cert.sh)
+  certbot:
+    image: certbot/certbot:v5.0.0
+    profiles: [tools]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme-webroot:/var/www/acme
+
+  # 관측 (사양서 12장, S21-2). 알림 규칙은 로컬과 같은 infra/prometheus/alerts.yml, 받는 곳은 Discord
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"   # SSM 터널로만 본다
+    mem_limit: 384m
+    restart: unless-stopped
+    <<: *logging
+
+  # 서버 디스크·메모리, 백업 성공 시각 (alerts.yml 의 DiskSpaceLow·MemoryLow·BackupStale)
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    command: ["--path.rootfs=/host", "--collector.textfile.directory=/host/opt/famlog/metrics"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    mem_limit: 64m
+    restart: unless-stopped
+    <<: *logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${FAMLOG_SECRETS_DIR:-/opt/famlog/secrets}/discord-webhook-url:/run/secrets/discord-webhook-url:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    mem_limit: 128m
+    restart: unless-stopped
+    <<: *logging
+
+volumes:
+  postgres-data:
+  redis-data:
+  letsencrypt:
+  acme-webroot:
+  prometheus-data:
+  alertmanager-data:

@@ -87,8 +87,14 @@ docker compose -f infra/docker-compose.yml --env-file infra/.env --profile monit
 - API 메트릭은 관리 포트 `http://localhost:8091/actuator/prometheus` (앱 포트 8080 에는 `/livez`·`/readyz` 만). 운영에서는 관리 포트를 외부에 열지 않는다
 - 알림 규칙: `prometheus/alerts.yml` (API 다운, 5xx 급증, 로그인 실패 급증, Refresh 재사용, AI 비용 80%·상한, DLQ, 배치 실패, 푸시 포기, 워커 다운). 규칙 테스트 `prometheus/alerts_test.yml`
 - 확인: `docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus:ro" -w /etc/prometheus --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml`
-- 알림을 받을 곳(이메일·Discord 등)은 S22 에서 `alertmanager/alertmanager.yml` 에 넣는다. 지금은 웹 화면에서만 본다
+- 로컬은 알림을 웹 화면에서만 본다. 운영은 Discord 로 받는다 (`prod/alertmanager/alertmanager.yml`)
+- 서버 자원·백업 규칙(`DiskSpaceLow`·`MemoryLow`·`BackupStale`)은 운영의 node-exporter 가 있을 때만 동작한다
 - 서버 두 개를 같이 띄울 때(예: 8080·8081)는 관리 포트가 겹치지 않게 `--management.server.port=8092` 를 준다
+
+## 운영 (S22-1)
+
+운영 구성은 `prod/` (Compose·Nginx·스크립트·AWS 정책). 절차는 `docs/runbooks/deploy.md`.
+로컬 구성과 다른 점: SeaweedFS 대신 실제 S3(인스턴스 역할), Nginx(TLS) 앞단, 이미지는 GHCR 에서 받는다, 모니터링을 항상 띄운다.
 
 ## 알아둘 점
 

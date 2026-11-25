@@ -9,21 +9,24 @@
 |---|---|---|
 | PostgreSQL (모든 테이블) | `pg_dump -Fc` → openssl AES-256-CBC(PBKDF2 20만 회) 암호화 → `BACKUP_DIR` | 7일 (`BACKUP_RETENTION_DAYS`) |
 | Redis | 백업하지 않는다. 세션 폐기 표시·요청 제한·분석 대기열·스트림뿐이라 잃어도 다시 만들어진다 (아래 5절) | - |
-| S3 (사진·동영상·내보내기 ZIP) | 이 스크립트 범위 밖. 운영 S3 버전 관리·수명 주기는 S22에서 정한다 | - |
+| S3 (사진·동영상·내보내기 ZIP) | 이 스크립트 범위 밖. S3 자체 내구성에 맡기고, 지우는 것은 앱 배치가 한다 (버전 관리는 끔: 삭제한 사진이 남지 않게, 사양서 8.9) | - |
 
 - 암호(`BACKUP_PASSPHRASE`)는 `infra/.env`에만 둔다. **백업과 다른 곳(비밀번호 관리자 등)에도 보관한다. 잃으면 복구할 수 없다.**
 - 백업 파일 옆에 `.sha256`이 생긴다. 복구 스크립트가 먼저 확인한다.
-- 백업 디렉터리는 700, 파일은 600. 외부 보관(다른 리전·다른 계정)은 S22.
+- 백업 디렉터리는 700, 파일은 600.
+- 운영(S22-1): 암호화된 파일을 백업 전용 S3 버킷에도 올린다 (`BACKUP_S3_URI`, 버킷 수명 규칙으로 30일 뒤 삭제). [deploy.md](deploy.md) 2.2
 
 ## 2. 매일 자동 백업
 
 ```bash
-# 서버의 crontab (UTC 03:00 = KST 12:00. 사용자 적은 시간으로 바꿔도 된다)
-0 3 * * * cd /opt/famlog && sh infra/scripts/backup-db.sh >> /var/log/famlog-backup.log 2>&1
+# 운영: infra/prod/famlog.cron 이 /etc/cron.d/famlog 로 들어간다 (매일 03:00 KST = UTC 18:00)
+0 18 * * * root cd /opt/famlog/app && FAMLOG_ENV_FILE=/opt/famlog/.env FAMLOG_COMPOSE_FILE=infra/prod/docker-compose.yml sh infra/scripts/backup-db.sh >> /var/log/famlog-backup.log 2>&1
 ```
 
 - 성공하면 `백업 완료: famlog-<UTC시각>.dump.enc (... bytes)` 한 줄. 실패하면 0이 아닌 종료 코드와 `백업 실패: ...`.
-- 확인: 매주 한 번 `ls -l $BACKUP_DIR`로 최근 7개가 있는지 본다. (백업 실패 알림은 S22 운영 서버에서 cron 실패 → 알림으로 연결)
+- 배포할 때마다 `deploy.sh` 가 교체 직전에 한 번 더 백업한다.
+- 실패 알림: 성공할 때마다 `BACKUP_METRICS_DIR/backup.prom` 에 시각을 남기고, 26시간 넘게 성공이 없으면 Discord 로 `BackupStale` 알림.
+- 확인: 매주 한 번 `ls -l $BACKUP_DIR`로 최근 7개가 있는지 본다.
 
 ## 3. 복구 리허설 (출시 전 1회 + 분기마다)
 

@@ -1,0 +1,3 @@
+# gitleaks 예외 (지문 단위). 실제 비밀이 아닌 테스트 값만 넣는다
+# LogMaskerTest: 서명이 'signature-value' 인 가짜 JWT (마스킹 확인용)
+094a4ee6acfcd71c2d8bd510f6360767fa12c878:src/test/java/com/famlog/common/logging/LogMaskerTest.java:jwt:13

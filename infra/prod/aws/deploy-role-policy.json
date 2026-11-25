@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RunOnFamlogServerOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:ap-northeast-2:ACCOUNT_ID:instance/*",
+      "Condition": {"StringEquals": {"ssm:resourceTag/famlog-role": "prod"}}
+    },
+    {
+      "Sid": "ShellDocument",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:ap-northeast-2::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "ReadResult",
+      "Effect": "Allow",
+      "Action": ["ssm:ListCommandInvocations", "ssm:GetCommandInvocation"],
+      "Resource": "*"
+    }
+  ]
+}

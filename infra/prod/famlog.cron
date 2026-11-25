@@ -1,0 +1,9 @@
+# FamLog 운영 cron (setup-server.sh 가 /etc/cron.d/famlog 로 복사한다). 서버 시간대는 UTC
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+# DB 백업: 매일 03:00 KST (사양서 12장 하루 1회). 서버 밖 사본은 BACKUP_S3_URI
+0 18 * * * root cd /opt/famlog/app && FAMLOG_ENV_FILE=/opt/famlog/.env FAMLOG_COMPOSE_FILE=infra/prod/docker-compose.yml sh infra/scripts/backup-db.sh >> /var/log/famlog-backup.log 2>&1
+
+# 인증서 갱신 확인: 하루 두 번
+17 3,15 * * * root cd /opt/famlog/app && sh infra/prod/scripts/renew-cert.sh >> /var/log/famlog-cert.log 2>&1

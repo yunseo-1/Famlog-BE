@@ -50,3 +50,44 @@ tests:
           - exp_labels: {severity: critical, job: famlog-api}
             exp_annotations:
               summary: "살아 있는 워커가 없어요 (사진 처리·AI 분석이 멈춰요)"
+
+  # 서버 자원: 디스크 여유 10% 가 10분 넘게 이어지면, 메모리는 여유 20% 라 울리지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node", mountpoint="/", fstype="ext4"}'
+        values: "10x15"
+      - series: 'node_filesystem_size_bytes{job="node", mountpoint="/", fstype="ext4"}'
+        values: "100x15"
+      - series: 'node_memory_MemAvailable_bytes{job="node"}'
+        values: "20x15"
+      - series: 'node_memory_MemTotal_bytes{job="node"}'
+        values: "100x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DiskSpaceLow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: DiskSpaceLow
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node, mountpoint: /, fstype: ext4}
+            exp_annotations:
+              summary: "서버 디스크 여유가 15% 아래예요"
+      - eval_time: 12m
+        alertname: MemoryLow
+        exp_alerts: []
+
+  # 백업: 마지막 성공이 0초(1970) 그대로면 26시간 뒤 알린다
+  - interval: 1h
+    input_series:
+      - series: 'famlog_backup_last_success_timestamp_seconds{job="node"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node}
+            exp_annotations:
+              summary: "DB 백업이 26시간 넘게 성공하지 않았어요 (/var/log/famlog-backup.log)"

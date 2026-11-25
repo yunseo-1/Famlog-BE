@@ -9,10 +9,12 @@
 set -eu
 
 INFRA="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$INFRA/.env"
+# 운영: FAMLOG_ENV_FILE=/opt/famlog/.env FAMLOG_COMPOSE_FILE=infra/prod/docker-compose.yml (infra/prod/scripts 가 넣는다)
+ENV_FILE=${FAMLOG_ENV_FILE:-$INFRA/.env}
+COMPOSE_FILE_PATH=${FAMLOG_COMPOSE_FILE:-$INFRA/docker-compose.yml}
 FILE="${1:-}"
 TARGET="${2:-}"
-[ -f "$ENV_FILE" ] || { echo "infra/.env 가 없습니다" >&2; exit 1; }
+[ -f "$ENV_FILE" ] || { echo "$ENV_FILE 가 없습니다" >&2; exit 1; }
 [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "사용: sh infra/scripts/restore-db.sh <백업 파일> [대상 DB | --into-main]" >&2; exit 1; }
 
 env_value() { grep "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
@@ -29,7 +31,7 @@ if [ -f "$FILE.sha256" ]; then
 fi
 
 psql() {
-  docker compose -f "$INFRA/docker-compose.yml" --env-file "$ENV_FILE" exec -T postgres psql -U "$DB_USER" "$@"
+  docker compose -f "$COMPOSE_FILE_PATH" --env-file "$ENV_FILE" exec -T postgres psql -U "$DB_USER" "$@"
 }
 
 if [ "$TARGET" = "--into-main" ]; then
@@ -44,7 +46,7 @@ fi
 
 psql -d postgres -q -c "CREATE DATABASE \"$TARGET\""
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in "$FILE" \
-  | docker compose -f "$INFRA/docker-compose.yml" --env-file "$ENV_FILE" exec -T postgres \
+  | docker compose -f "$COMPOSE_FILE_PATH" --env-file "$ENV_FILE" exec -T postgres \
       pg_restore -U "$DB_USER" -d "$TARGET" --no-owner --exit-on-error
 echo "복구 완료: DB $TARGET"
 psql -d "$TARGET" -At -c "SELECT 'flyway ' || max(installed_rank) || ', users ' || (SELECT count(*) FROM users)

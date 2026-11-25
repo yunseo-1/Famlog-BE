@@ -70,3 +70,25 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "살아 있는 워커가 없어요 (사진 처리·AI 분석이 멈춰요)"
+
+      # 서버 자원 (운영 VM, node-exporter 가 있을 때만: infra/prod). 디스크가 차면 DB·로그·백업이 함께 멈춘다
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/", fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/", fstype!="tmpfs"} < 0.15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "서버 디스크 여유가 15% 아래예요"
+
+      - alert: MemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "서버 메모리 여유가 10% 아래예요"
+
+      # DB 백업 (운영 cron 매일 03:00 KST, backup-db.sh 가 성공 시각을 남긴다)
+      - alert: BackupStale
+        expr: time() - famlog_backup_last_success_timestamp_seconds > 26 * 3600
+        labels: {severity: critical}
+        annotations:
+          summary: "DB 백업이 26시간 넘게 성공하지 않았어요 (/var/log/famlog-backup.log)"

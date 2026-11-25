@@ -1,0 +1,23 @@
+# 운영 Prometheus (사양서 12장 관측, S22-1). 로컬 설정(infra/prometheus/prometheus.yml)과 규칙은 같고 대상만 다르다:
+# 같은 docker 네트워크의 api 관리 포트(8091)와 서버 자원(node-exporter). 둘 다 밖으로 열지 않는다
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: famlog-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["api:8091"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]

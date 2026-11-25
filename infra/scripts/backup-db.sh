@@ -4,12 +4,16 @@
 # 사용: sh infra/scripts/backup-db.sh
 #   필요: infra/.env 의 POSTGRES_USER·POSTGRES_DB·BACKUP_PASSPHRASE (값은 출력하지 않는다)
 #   선택: BACKUP_DIR (기본 ~/famlog-backups), BACKUP_RETENTION_DAYS (기본 7)
+#         BACKUP_S3_URI (예: s3://famlog-backup-xxx/db): 서버 밖 사본. aws CLI·인스턴스 역할 필요, 버킷 수명 규칙으로 지운다
+#         BACKUP_METRICS_DIR: 성공 시각을 Prometheus 형식으로 남긴다 (운영 node-exporter → BackupStale 알림)
 #   매일: cron 예) 0 3 * * * cd /opt/famlog && sh infra/scripts/backup-db.sh >> /var/log/famlog-backup.log 2>&1
 set -eu
 
 INFRA="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$INFRA/.env"
-[ -f "$ENV_FILE" ] || { echo "infra/.env 가 없습니다" >&2; exit 1; }
+# 운영: FAMLOG_ENV_FILE=/opt/famlog/.env FAMLOG_COMPOSE_FILE=infra/prod/docker-compose.yml (infra/prod/scripts 가 넣는다)
+ENV_FILE=${FAMLOG_ENV_FILE:-$INFRA/.env}
+COMPOSE_FILE_PATH=${FAMLOG_COMPOSE_FILE:-$INFRA/docker-compose.yml}
+[ -f "$ENV_FILE" ] || { echo "$ENV_FILE 가 없습니다" >&2; exit 1; }
 
 env_value() { grep "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
@@ -20,6 +24,8 @@ BACKUP_DIR=${BACKUP_DIR:-$(env_value BACKUP_DIR)}
 BACKUP_DIR=${BACKUP_DIR:-$HOME/famlog-backups}
 RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-$(env_value BACKUP_RETENTION_DAYS)}
 RETENTION_DAYS=${RETENTION_DAYS:-7}
+BACKUP_S3_URI=${BACKUP_S3_URI:-$(env_value BACKUP_S3_URI)}
+BACKUP_METRICS_DIR=${BACKUP_METRICS_DIR:-$(env_value BACKUP_METRICS_DIR)}
 [ -n "$BACKUP_PASSPHRASE" ] || { echo "infra/.env 에 BACKUP_PASSPHRASE 가 없습니다 (openssl rand -hex 32)" >&2; exit 1; }
 export BACKUP_PASSPHRASE
 
@@ -33,7 +39,7 @@ PARTIAL="$OUT.partial"
 STATUS_FILE=$(mktemp)
 trap 'rm -f "$PARTIAL" "$STATUS_FILE"' EXIT
 {
-  docker compose -f "$INFRA/docker-compose.yml" --env-file "$ENV_FILE" exec -T postgres \
+  docker compose -f "$COMPOSE_FILE_PATH" --env-file "$ENV_FILE" exec -T postgres \
     pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc --no-owner || echo "pg_dump" > "$STATUS_FILE"
 } | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -out "$PARTIAL"
 [ ! -s "$STATUS_FILE" ] || { echo "백업 실패: pg_dump" >&2; exit 1; }
@@ -47,3 +53,19 @@ find "$BACKUP_DIR" -name 'famlog-*.dump.enc*' -type f -mtime +"$((RETENTION_DAYS
 
 SIZE=$(wc -c < "$OUT" | tr -d ' ')
 echo "백업 완료: $(basename "$OUT") (${SIZE} bytes), 보관 ${RETENTION_DAYS}일, 위치 $BACKUP_DIR"
+
+# 서버 밖 사본 (암호화된 파일 그대로). 실패하면 cron 로그에 남도록 0 이 아닌 값으로 끝낸다
+if [ -n "$BACKUP_S3_URI" ]; then
+  aws s3 cp --only-show-errors "$OUT" "$BACKUP_S3_URI/$(basename "$OUT")"
+  aws s3 cp --only-show-errors "$OUT.sha256" "$BACKUP_S3_URI/$(basename "$OUT").sha256"
+  echo "서버 밖 사본 올림: $BACKUP_S3_URI/$(basename "$OUT")"
+fi
+
+# 성공 시각 (서버 밖 사본까지 끝난 뒤). 임시 파일로 쓰고 옮겨 반쯤 쓴 파일을 읽지 않게 한다
+if [ -n "$BACKUP_METRICS_DIR" ]; then
+  mkdir -p "$BACKUP_METRICS_DIR"
+  printf '# HELP famlog_backup_last_success_timestamp_seconds 마지막 DB 백업 성공 시각\n# TYPE famlog_backup_last_success_timestamp_seconds gauge\nfamlog_backup_last_success_timestamp_seconds %s\n' \
+    "$(date +%s)" > "$BACKUP_METRICS_DIR/backup.prom.tmp"
+  chmod 644 "$BACKUP_METRICS_DIR/backup.prom.tmp"
+  mv "$BACKUP_METRICS_DIR/backup.prom.tmp" "$BACKUP_METRICS_DIR/backup.prom"
+fi
