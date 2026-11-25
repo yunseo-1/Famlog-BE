@@ -1,0 +1,13 @@
+# API 이미지(루트 Dockerfile) 빌드에 필요 없는 것. 비밀(infra/.env)이 이미지에 들어가지 않게 한다
+.git
+.gradle
+.idea
+build
+docs
+infra
+scripts
+worker
+src/test
+*.iml
+**/.env
+**/.env.*

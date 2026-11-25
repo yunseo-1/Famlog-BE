@@ -1,0 +1,120 @@
+# 운영 배포 (사양서 13.2 CI/CD, S22-1, docs/runbooks/deploy.md)
+# main 의 backend-test 가 통과하면 이미지(api·worker·postgres)를 GHCR 에 올리고, production 환경 승인을 받은 뒤
+# SSM 으로 서버에서 deploy.sh 를 돌린다. 서버 SSH 는 열지 않고, AWS 키도 저장하지 않는다 (GitHub OIDC → 배포 역할).
+# 되돌리기: Actions > deploy > Run workflow 에 이전 커밋 SHA
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [backend-test]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 배포할 main 커밋 SHA (되돌리기는 이전 SHA)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  images:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha || github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # 직접 실행해도 main 에 있는 커밋만 배포한다
+      - name: Resolve commit
+        id: sha
+        run: |
+          SHA=$(git rev-parse HEAD)
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "main 에 없는 커밋입니다: $SHA"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/famlog-api:${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: worker
+          target: base
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/famlog-worker:${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Postgres image
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/postgres
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/famlog-postgres:${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,mode=max,scope=postgres
+
+  deploy:
+    needs: images
+    runs-on: ubuntu-24.04
+    environment: production   # 저장소 설정에서 승인자(Required reviewers)를 건다
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SHA: ${{ needs.images.outputs.sha }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Deploy on server (SSM)
+        run: |
+          CMD="export HOME=/root && cd /opt/famlog/app && git fetch -q origin && git checkout -q --detach $SHA && sh infra/prod/scripts/deploy.sh $SHA"
+          ID=$(aws ssm send-command --document-name AWS-RunShellScript \
+            --targets Key=tag:famlog-role,Values=prod --comment "deploy ${SHA:0:12}" --timeout-seconds 600 \
+            --parameters "$(jq -nc --arg c "$CMD" '{commands: [$c], executionTimeout: ["900"]}')" \
+            --query Command.CommandId --output text)
+          echo "SSM 명령: $ID"
+          for _ in $(seq 1 90); do
+            sleep 10
+            STATUS=$(aws ssm list-command-invocations --command-id "$ID" --query 'CommandInvocations[0].Status' --output text)
+            case "$STATUS" in Pending|InProgress|Delayed|None) continue ;; esac
+            break
+          done
+          aws ssm list-command-invocations --command-id "$ID" --details \
+            --query 'CommandInvocations[0].CommandPlugins[0].Output' --output text
+          echo "결과: $STATUS"
+          [ "$STATUS" = Success ]

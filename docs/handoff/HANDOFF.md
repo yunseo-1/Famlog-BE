@@ -125,6 +125,7 @@
 | 11/20 | S20-3: 복구는 로그인 403 `ACCOUNT_PENDING_DELETION` → `restore:true` 재로그인(사양서 `/users/me/restore` 대신). 유예 중 그룹 자격 유지, 혼자인 그룹은 함께 삭제 예정·복구 시 되살림, 사진·동영상 삭제는 선택(위치는 항상 삭제). 웹은 정적 안내 + 이메일 → 관리자 대리 삭제. 삭제 예정 그룹의 실제 파기 배치는 S20-5 | 사용자 결정 |
 | 11/22 | S20-4: 내보내기는 서버 배치가 ZIP(JSON + 7일 원본 링크)을 만들어 S3에 둔다. 메시지·사진은 나간 그룹 포함, 일정·할 일·장소는 지금 속한 그룹만. 할 일·동의 내역도 넣음. 준비 후 24시간 안 재요청 429(실패는 제외), 실패 3번 재시도. 웹 삭제 안내에 설정 진입점(채팅 탭 톱니바퀴) 추가 | 사용자 결정 |
 | 11/22 | S20-5를 S20-5-1(그룹 파기·미디어 정리·보관 기간)과 S20-5-2(PEL 회수·푸시 재시도·멈춘 요청·관리자 운영 배너)로 나눔. 그룹 파기는 데이터 전부 삭제 + 기록용 행(DELETED, "삭제된 그룹")만 남김. 위치 확인자료 6개월, 삭제된 메시지의 미디어는 매시 배치(신고된 것은 신고 보관 기간 동안 남김) | 사용자 결정 |
+| 11/25 | 사양서 v2.1: 앨범·이야기·영상을 v1.0에 넣고(S23~S25), 운영 서버 최소 구성과 Play 비공개 테스트를 S23 전에 먼저 시작. S22-1 운영 배포: AWS 서울 EC2 t3.medium + Docker Compose(DB·Redis 같은 VM), S3(인스턴스 역할, 키 없음), Nginx + Let's Encrypt, 도메인 `famlog.kr`(.com·.net·.app은 이미 등록됨), 운영 키는 서버에서 새로 생성, GHCR 이미지 + production 승인 + SSM(OIDC, SSH 닫음), 80·443만 공개·`/admin`은 SSM 터널, 알림 Discord·AWS Budgets 80%, 백업 매일 + 백업 버킷 30일, gitleaks | 사용자 결정 |
 | 11/24 | AI 분석 대화 멈춤 30초 → 5초 (PR #32). S21을 S21-1 보안 테스트 → S21-2 관측(micrometer-registry-prometheus 승인, 관리 포트 분리, 알림 받을 곳은 S22) → S21-3 백업(로컬 7일·openssl 암호화)·runbook(이 레포 → 문서 레포 복사)으로 나눔. T8은 기록된 평가 재계산(무료)으로 확인 | 사용자 결정 |
 
 ## 3. Figma 상태
@@ -197,7 +198,9 @@
 | S20-5-2 | 서버·워커 PEL 회수, 푸시 재시도, 멈춘 AI 요청 정리, 관리자 운영 배너 | ✅ PR #31 |
 | S21-1 | 보안 테스트 SEC-T1(엔드포인트 목록에서 자동 생성)·T2·T9(카나리·로그 검사 CI) | ✅ PR #33 |
 | S21-2 | Prometheus 메트릭(관리 포트 8091)·운영 게이지·사건 카운터, 알림 규칙 10개, monitoring 프로필 | ✅ PR #34 |
-| S21-3 | DB 백업·복구 스크립트(암호화·7일), 복구 리허설, runbook(backup·incident), 관리자 세션 폐기 API | ✅ 이번 PR |
+| S21-3 | DB 백업·복구 스크립트(암호화·7일), 복구 리허설, runbook(backup·incident), 관리자 세션 폐기 API | ✅ PR #35 |
+| S22-1a | 운영 구성(API Dockerfile, 운영 Compose·Nginx TLS, 서버 준비·비밀·배포·인증서 스크립트, AWS 정책), 배포 워크플로(승인·SSM), gitleaks, 서버 자원·백업 알림, runbook(deploy) | ✅ 이번 PR |
+| S22-1b | 실제 AWS·도메인 준비, 첫 배포, 인증서, 운영 확인 체크리스트, 앱에 운영 주소 전달 | 다음 |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -535,6 +538,16 @@
 - 관리자 `POST /admin/api/users/{userId}/sessions/revoke`: 사고 때 그 사용자의 모든 기기 즉시 로그아웃(감사 로그 `ADMIN_SESSIONS_REVOKED`)
 - runbook: `docs/runbooks/backup.md`, `docs/runbooks/incident.md`(72시간 통지·신고는 법률 검토 필요, 모의 훈련 체크리스트). 문서 레포 `docs/runbooks/`로 복사
 
+### 운영 배포 (S22-1)
+
+- 구성: `infra/prod/docker-compose.yml` (nginx·api·worker·postgres·redis·prometheus·alertmanager·node-exporter, certbot은 tools 프로필). 프로젝트 이름 `famlog-prod`라 로컬 `famlog`와 겹치지 않는다
+- 이미지: `ghcr.io/yunseo-1/famlog-{api,worker,postgres}:<커밋 SHA>`. API 이미지는 루트 `Dockerfile`(JRE 21, uid 10001, `/readyz` 헬스체크)
+- 서버: `/opt/famlog/{app,.env,secrets,backups,metrics}`. `setup-server.sh` → `init-env.sh`(운영 키 생성, 값 출력 없음) → Actions 배포 → `init-cert.sh`
+- 배포: `deploy.yml`(backend-test 통과 → 이미지 → production 승인 → SSM `deploy.sh <SHA>`). `deploy.sh`는 배포 전 백업 → `up --wait` → `/readyz`. 교체 전에 실패하면 태그를 되돌린다. 되돌리기는 이전 SHA로 Run workflow
+- Nginx: TLS 1.2+, HSTS 한 번(API 쪽 헤더 숨김), `/admin`·`/actuator` 404, `X-Forwarded-For`는 앱 값 대신 실제 접속 IP로 덮어씀, `/ws` 1시간
+- 운영 초대 링크는 `https://famlog.kr/invite/` (환경 변수, App Links `assetlinks.json`은 S22-2). 로컬 기본값 `famlog.app`은 남의 도메인이라 운영에서 쓰지 않는다
+- 로컬 검증 2026-11-25: 로컬 레지스트리 + 운영 Compose 그대로 `deploy.sh` → HTTPS·301·차단 경로·TLS 1.1 거절·HTTP/2, 그룹 생성, 사진 업로드 → 워커 READY, `wss://` 채팅, IP 위조 무시, 배포 전 백업 → 복구(Flyway 17), 실패 배포 시 태그 복원, 로그 검사 통과
+
 ### 다음 단계로 넘긴 것
 
 - 앨범 단계: pHash·흐림 점수, `GET /groups/{id}/media?month=`
@@ -550,7 +563,7 @@
 - v1.1: 반복 일정 "이번 회차만" 수정·삭제, 음력 반복(DIF-04), 장보기 목록(TODO-02)
 - 매년: 다음 해 공휴일 마이그레이션 (2028년분은 2027년 하반기에, 우주항공청 월력요항 기준)
 - 모바일 요청 검토: `GET /users/me` (지금은 앱이 로그인 응답의 user를 저장해 씀)
-- 자리 값: 캘린더 팔레트 뒤 8색(디자인 확정 시), 초대 링크 도메인 `famlog.app`(App Links 도메인 확정 시)
+- 자리 값: 캘린더 팔레트 뒤 8색(디자인 확정 시). 초대 링크 기본값 `famlog.app`은 남의 도메인 → `famlog.kr` 구매 후 기본값도 바꾼다(운영은 S22-1에서 환경 변수로 이미 `famlog.kr`)
 
 ### 문서 레포(사양서)에 반영할 것
 
