@@ -267,6 +267,30 @@ class AccountDeletionApiTest extends ChatIntegrationTest {
     }
 
     @Test
+    void 사고_대응으로_관리자가_사용자의_모든_세션을_바로_폐기한다() throws Exception {
+        Member me = signUp();
+        mockMvc.perform(get("/api/v1/users/me/consents").header(HttpHeaders.AUTHORIZATION, bearer(me)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/admin/api/users/{id}/sessions/revoke", me.userId()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/admin/api/users/{id}/sessions/revoke", me.userId()).header("X-Admin-Token",
+                "test-admin-token")).andExpect(status().isNoContent());
+
+        // Access 토큰은 만료 전이라도 바로 401, Refresh 도 거절
+        mockMvc.perform(get("/api/v1/users/me/consents").header(HttpHeaders.AUTHORIZATION, bearer(me)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(AuthApi.refresh(me.refreshToken())).andExpect(status().isUnauthorized());
+        assertThat(count("audit_logs WHERE action = 'ADMIN_SESSIONS_REVOKED' AND target_id = " + me.userId()))
+                .isOne();
+        // 계정은 그대로라 다시 로그인할 수 있다
+        mockMvc.perform(AuthApi.login("kakao", FakeSocialLoginVerifier.token(me.providerUserId()), "device-9"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/admin/api/users/{id}/sessions/revoke", Long.MAX_VALUE).header("X-Admin-Token",
+                "test-admin-token")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void 웹_삭제_안내_페이지는_로그인_없이_열리고_연락처가_있다() throws Exception {
         mockMvc.perform(get("/account-deletion")).andExpect(status().isOk())
                 .andExpect(forwardedUrl("/account-deletion/index.html"));

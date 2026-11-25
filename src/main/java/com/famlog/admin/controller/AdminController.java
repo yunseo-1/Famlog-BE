@@ -121,6 +121,14 @@ public class AdminController {
                 AccountDeletionRequest.SOURCE_ADMIN);
     }
 
+    @Operation(summary = "사용자 세션 모두 폐기", description = "사고 대응(계정 탈취 의심): 그 사용자의 모든 기기를 바로 로그아웃시킨다. "
+            + "Access 토큰도 즉시 401, WebSocket 끊김. 감사 로그 ADMIN_SESSIONS_REVOKED. 없는 사용자면 404")
+    @PostMapping("/users/{userId}/sessions/revoke")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void revokeSessions(@PathVariable long userId) {
+        opsService.revokeSessions(userId);
+    }
+
     @Operation(summary = "운영 배너", description = "이번 달(UTC) AI 비용·상한·비율·단계(OK/WARN/OVER), 실패·대기 요청 수, DLQ 길이")
     @GetMapping("/ops-summary")
     OpsSummary opsSummary() {
