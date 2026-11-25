@@ -39,11 +39,14 @@ import com.famlog.group.repository.GroupMemberRepository;
 import com.famlog.user.domain.User;
 import com.famlog.user.repository.UserRepository;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * 가족 그룹 (사양서 2장, 4.1 GRP-01~05). 권한 규칙은 2.2 매트릭스를 따른다.
  * 경로에 groupId가 있는 API는 GroupPathAccessFilter가 이미 구성원 여부를 확인했지만, 서비스도 다시 확인한다
  * (필터를 거치지 않는 호출 경로가 생겨도 안전하게).
  */
+@Slf4j
 @Service
 public class GroupService {
 
@@ -392,6 +395,8 @@ public class GroupService {
         userRepository.clearCurrentGroup(group.getId());
         auditLogger.record(actorId, AuditAction.GROUP_DELETION_SCHEDULED, "GROUP", group.getId(), group.getId(),
                 Map.of("reason", reason, "deleteScheduledAt", group.getDeleteScheduledAt().toString()));
+        // 백업으로 복구하면 사라질 수 있다: 복구 뒤 이 로그로 다시 적용한다 (docs/runbooks/backup.md)
+        log.info("그룹 삭제 예정: groupId={}, reason={}", group.getId(), reason);
     }
 
     // --- 공통 ---

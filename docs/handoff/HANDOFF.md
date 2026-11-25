@@ -196,7 +196,8 @@
 | S20-5-1 | 삭제 예정 그룹 파기, 미디어 파일 정리, 보관 기간 정리 배치, 에러 코드 `MEDIA_UNAVAILABLE` | ✅ PR #30 |
 | S20-5-2 | 서버·워커 PEL 회수, 푸시 재시도, 멈춘 AI 요청 정리, 관리자 운영 배너 | ✅ PR #31 |
 | S21-1 | 보안 테스트 SEC-T1(엔드포인트 목록에서 자동 생성)·T2·T9(카나리·로그 검사 CI) | ✅ PR #33 |
-| S21-2 | Prometheus 메트릭(관리 포트 8091)·운영 게이지·사건 카운터, 알림 규칙 10개, monitoring 프로필 | ✅ 이번 PR |
+| S21-2 | Prometheus 메트릭(관리 포트 8091)·운영 게이지·사건 카운터, 알림 규칙 10개, monitoring 프로필 | ✅ PR #34 |
+| S21-3 | DB 백업·복구 스크립트(암호화·7일), 복구 리허설, runbook(backup·incident), 관리자 세션 폐기 API | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -524,6 +525,15 @@
 - **메트릭** (`application=famlog-api` 태그): HTTP 기본(`http_server_requests`, 5xx·로그인 401/429), `famlog_auth_refresh_reuse_total`, `famlog_batch_failures_total{job}`(파기·정리·내보내기·회수·AI·리마인드), `famlog_push_failures_total{reason}`(invalid_token·rejected·gave_up), 게이지 `famlog_ai_cost_month_usd`·`famlog_ai_budget_usd`·`famlog_ai_jobs_queued`·`famlog_stream_dlq_length{stream}`·`famlog_worker_alive`(워커가 30초마다 `famlog:worker:alive:{consumer}` 90초 키). 태그에 사용자·그룹 id 없음
 - **알림 규칙** `infra/prometheus/alerts.yml`: ApiDown, Http5xxSpike, LoginFailureSpike, RefreshTokenReuse, AiCostWarning(80%), AiBudgetReached, DeadLetters, BatchFailed, PushGivingUp, WorkerDown. 규칙 테스트 `alerts_test.yml`, CI `monitoring-config` 잡(promtool·amtool)
 - **실행**: `docker compose ... --profile monitoring up -d` → Prometheus :9090, Alertmanager :9093. 받을 곳(이메일·Discord)은 S22
+
+### 백업·사고 대응 (S21-3)
+
+- `infra/scripts/backup-db.sh`: pg_dump(custom) → openssl AES-256(PBKDF2) → `BACKUP_DIR`(기본 ~/famlog-backups) + `.sha256`, 7일 지난 파일 삭제. `infra/.env`의 `BACKUP_PASSPHRASE`(로컬은 생성해 둠, 다른 곳에도 보관). cron 예시는 runbook
+- `infra/scripts/restore-db.sh <파일> [대상 DB | --into-main]`: 기본은 새 DB(리허설), `--into-main`은 DB 이름 입력 확인 후 운영 DB 교체
+- 리허설 2026-11-25 로컬: 37개 테이블 건수 일치, 복구 약 1초
+- 복구 뒤 삭제 다시 적용을 위해 서버 로그에 `계정 삭제 요청: userId=`·`그룹 삭제 예정: groupId=` (id만)
+- 관리자 `POST /admin/api/users/{userId}/sessions/revoke`: 사고 때 그 사용자의 모든 기기 즉시 로그아웃(감사 로그 `ADMIN_SESSIONS_REVOKED`)
+- runbook: `docs/runbooks/backup.md`, `docs/runbooks/incident.md`(72시간 통지·신고는 법률 검토 필요, 모의 훈련 체크리스트). 문서 레포 `docs/runbooks/`로 복사
 
 ### 다음 단계로 넘긴 것
 

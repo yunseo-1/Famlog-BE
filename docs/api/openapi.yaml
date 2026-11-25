@@ -368,6 +368,30 @@ paths:
       summary: 계정 삭제 대신 처리
       tags:
       - admin
+  /admin/api/users/{userId}/sessions/revoke:
+    post:
+      description: "사고 대응(계정 탈취 의심): 그 사용자의 모든 기기를 바로 로그아웃시킨다. Access 토큰도 즉시 401,\
+        \ WebSocket 끊김. 감사 로그 ADMIN_SESSIONS_REVOKED. 없는 사용자면 404"
+      operationId: revokeSessions
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: 실패. code 로 원인을 구분한다
+      summary: 사용자 세션 모두 폐기
+      tags:
+      - admin
   /api/v1/ai-notice:
     get:
       description: "무엇이 어디로 전송되는지와 국외 이전 고지. 그룹 AI 분석을 켤 때(관리자)와 그룹 설정의 aiNoticePending=true\

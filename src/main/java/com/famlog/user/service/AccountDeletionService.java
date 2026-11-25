@@ -88,6 +88,8 @@ public class AccountDeletionService {
         meta.put("deleteMedia", deleteMedia);
         meta.put("scheduledGroups", scheduled.size());
         auditLogger.record(userId, AuditAction.ACCOUNT_DELETION_REQUESTED, "USER", userId, null, meta);
+        // 백업으로 복구하면 이 요청이 사라질 수 있다: 복구 뒤 이 로그로 다시 적용한다 (docs/runbooks/backup.md)
+        log.info("계정 삭제 요청: userId={}, source={}, deleteMedia={}", userId, source, deleteMedia);
     }
 
     /** 로그인할 때: 삭제 예정 계정이면 복구하거나(restore) 403 ACCOUNT_PENDING_DELETION(복구 가능한 날짜) */
