@@ -20,9 +20,11 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import com.famlog.common.metrics.FamlogMetrics;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 
+import io.micrometer.core.instrument.Metrics;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -31,7 +33,7 @@ import lombok.extern.slf4j.Slf4j;
  * <li>data 메시지만 보낸다 (notification 없음, Android 우선순위 HIGH). 채널 선택·묶음·화면에 있을 때 숨기기는 앱이 한다</li>
  * <li>404 UNREGISTERED, 403 SENDER_ID_MISMATCH, 400 INVALID_ARGUMENT(토큰 형식)는 쓸 수 없는 토큰으로 돌려준다</li>
  * <li>429·5xx·네트워크 오류는 3번까지 보낸다 (1초, 2초 뒤. Retry-After 가 있으면 그만큼, 최대 10초). 메모리에서만 다시 보낸다</li>
- * <li>로그에는 상태 코드만 남긴다 (토큰·본문·응답 본문을 남기지 않는다)</li>
+ * <li>로그에는 상태 코드만 남긴다 (토큰·본문·응답 본문을 남기지 않는다). 실패는 famlog.push.failures{reason} 로 센다</li>
  * </ul>
  */
 @Slf4j
@@ -94,10 +96,12 @@ public class FcmPushSender implements PushSender {
                 return true;
             } catch (HttpClientErrorException e) {
                 if (isInvalidToken(e)) {
+                    countFailure("invalid_token");
                     return false;
                 }
                 if (e.getStatusCode().value() != 429) {
                     log.warn("푸시 발송 실패: status={}", e.getStatusCode().value());
+                    countFailure("rejected");
                     return true;
                 }
                 wait = retryAfter(e, attempt);
@@ -110,6 +114,7 @@ public class FcmPushSender implements PushSender {
                 log.warn("푸시 발송 실패: error={}, attempt={}", e.getClass().getSimpleName(), attempt);
             }
             if (attempt >= MAX_ATTEMPTS) {
+                countFailure("gave_up");
                 return true;
             }
             try {
@@ -119,6 +124,11 @@ public class FcmPushSender implements PushSender {
                 return true;
             }
         }
+    }
+
+    /** 빈으로 만들지 않는 발송기라 전역 레지스트리에 센다 (Spring Boot 가 Prometheus 레지스트리를 전역에 붙인다) */
+    private static void countFailure(String reason) {
+        Metrics.counter(FamlogMetrics.PUSH_FAILURES, "reason", reason).increment();
     }
 
     private void sendOnce(PushMessage message) {

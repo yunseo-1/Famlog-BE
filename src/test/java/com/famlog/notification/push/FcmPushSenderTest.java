@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +24,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+
+import com.famlog.common.metrics.FamlogMetrics;
+
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 /** FCM HTTP v1 요청 형식과 오류 응답 처리 (사양서 4.2 NOTI-01). 실제 FCM 대신 MockRestServiceServer. */
 class FcmPushSenderTest {
@@ -33,8 +39,17 @@ class FcmPushSenderTest {
     private MockRestServiceServer server;
     private FcmPushSender sender;
 
+    /** 단위 테스트에는 Spring 레지스트리가 없으므로 전역 레지스트리에 잠깐 붙인다 */
+    private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
+
+    @AfterEach
+    void detachMeters() {
+        Metrics.removeRegistry(meters);
+    }
+
     @BeforeEach
     void setUp() {
+        Metrics.addRegistry(meters);
         RestClient.Builder builder = RestClient.builder().baseUrl("https://fcm.test");
         server = MockRestServiceServer.bindTo(builder).build();
         sleeps.clear();
@@ -102,8 +117,12 @@ class FcmPushSenderTest {
         server.expect(requestTo(SEND_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
         server.expect(requestTo(SEND_URL)).andRespond(withSuccess());
 
+        double gaveUpBefore = Metrics.counter(FamlogMetrics.PUSH_FAILURES, "reason", "gave_up").count();
+
         assertThat(sender.send(List.of(message("a"), message("b")))).isEmpty();
         assertThat(sleeps).containsExactly(Duration.ofSeconds(3), Duration.ofSeconds(10));
+        assertThat(Metrics.counter(FamlogMetrics.PUSH_FAILURES, "reason", "gave_up").count())
+                .isEqualTo(gaveUpBefore + 1);
         server.verify();
     }
 

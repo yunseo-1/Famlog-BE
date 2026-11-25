@@ -17,6 +17,7 @@ import com.famlog.auth.repository.RefreshTokenRepository;
 import com.famlog.auth.repository.UserSessionRepository;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.metrics.FamlogMetrics;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class SessionTokenService {
     private final AccessTokenIssuer accessTokenIssuer;
     private final AuthProperties properties;
     private final ApplicationEventPublisher events;
+    private final FamlogMetrics metrics;
     private final Clock clock;
 
     @Transactional
@@ -69,6 +71,7 @@ public class SessionTokenService {
                 log.warn("Refresh 토큰 재사용 감지 → 전 세션 폐기: userId={}, sessionId={}",
                         session.getUserId(), session.getId());
                 revokeAllSessions(session.getUserId());
+                metrics.refreshReuse();
                 throw invalid();
             }
             // 로그아웃된 기기의 토큰. 탈취 신호가 아니므로 다른 기기는 건드리지 않는다

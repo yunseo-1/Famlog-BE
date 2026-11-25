@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class AiTriggerTicker {
 
+    private final FamlogMetrics metrics;
     private final AiTriggerService triggerService;
     private final StaleAiJobService staleJobService;
     private final Clock clock;
@@ -31,6 +34,7 @@ class AiTriggerTicker {
         try {
             triggerService.runDue(Instant.now(clock));
         } catch (RuntimeException e) {
+            metrics.batchFailure("ai-trigger");
             log.warn("AI 분석 트리거를 처리하지 못했습니다: error={}", e.getClass().getSimpleName());
         }
     }
@@ -41,6 +45,7 @@ class AiTriggerTicker {
         try {
             staleJobService.failStale();
         } catch (RuntimeException e) {
+            metrics.batchFailure("ai-stale");
             log.warn("멈춘 AI 분석 요청을 정리하지 못했습니다: error={}", e.getClass().getSimpleName());
         }
     }

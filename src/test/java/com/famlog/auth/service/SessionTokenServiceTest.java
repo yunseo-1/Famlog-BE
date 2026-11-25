@@ -11,7 +11,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.famlog.auth.domain.Platform;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.metrics.FamlogMetrics;
 import com.famlog.support.IntegrationTest;
+
+import io.micrometer.core.instrument.MeterRegistry;
 
 /** Refresh 토큰 교체·재사용 감지·세션 폐기 (사양서 9.2, 9.9 SEC-T3). */
 class SessionTokenServiceTest extends IntegrationTest {
@@ -21,6 +24,9 @@ class SessionTokenServiceTest extends IntegrationTest {
 
     @Autowired
     SessionRevocationStore revocationStore;
+
+    @Autowired
+    MeterRegistry meterRegistry;
 
     @Test
     void 로그인하면_세션과_토큰이_생기고_DB에는_Refresh_원문이_아니라_해시만_남는다() {
@@ -62,6 +68,7 @@ class SessionTokenServiceTest extends IntegrationTest {
         TokenPair tablet = service.startSession(userId, "tablet", null, Platform.ANDROID);
         TokenPair otherUser = service.startSession(otherUserId, "phone", null, Platform.ANDROID);
         TokenPair rotated = service.refresh(phone.refreshToken());
+        double reuseBefore = meterRegistry.counter(FamlogMetrics.REFRESH_REUSE).count();
 
         // 탈취된 이전 토큰 재사용
         assertThatThrownBy(() -> service.refresh(phone.refreshToken()))
@@ -71,6 +78,8 @@ class SessionTokenServiceTest extends IntegrationTest {
 
         assertThat(revokedAt(phone.sessionId())).isTrue();
         assertThat(revokedAt(tablet.sessionId())).isTrue();
+        assertThat(meterRegistry.counter(FamlogMetrics.REFRESH_REUSE).count())
+                .as("알림 규칙 RefreshTokenReuse 가 보는 카운터").isEqualTo(reuseBefore + 1);
         assertThat(statuses(phone.sessionId())).doesNotContain("ACTIVE");
         assertThat(statuses(tablet.sessionId())).doesNotContain("ACTIVE");
         assertThat(revocationStore.isRevoked(phone.sessionId())).isTrue();

@@ -1,0 +1,52 @@
+# promtool test rules alerts_test.yml (CI 와 로컬: README 참고)
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'famlog_auth_refresh_reuse_total{job="famlog-api"}'
+        values: "0 0 1 1"
+      - series: 'famlog_batch_failures_total{job="group-purge"}'
+        values: "0 0 0 0"
+      - series: 'famlog_batch_failures_total{job="retention"}'
+        values: "0 1 1 1"
+      - series: 'famlog_ai_cost_month_usd{job="famlog-api"}'
+        values: "17 17 17 17"
+      - series: 'famlog_ai_budget_usd{job="famlog-api"}'
+        values: "20 20 20 20"
+      - series: 'famlog_worker_alive{job="famlog-api"}'
+        values: "1 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: RefreshTokenReuse
+        exp_alerts:
+          - exp_labels: {severity: critical, job: famlog-api}
+            exp_annotations:
+              summary: "Refresh 토큰 재사용(탈취 의심)을 감지해 그 사용자의 전 세션을 폐기했어요"
+      - eval_time: 3m
+        alertname: BatchFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, job: retention}
+            exp_annotations:
+              summary: "배치(retention)가 실패했어요"
+      - eval_time: 3m
+        alertname: AiCostWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, job: famlog-api}
+            exp_annotations:
+              summary: "이번 달 AI 비용이 상한의 80%를 넘었어요"
+      - eval_time: 3m
+        alertname: AiBudgetReached
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: WorkerDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: WorkerDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: famlog-api}
+            exp_annotations:
+              summary: "살아 있는 워커가 없어요 (사진 처리·AI 분석이 멈춰요)"

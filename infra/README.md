@@ -77,6 +77,19 @@ docker run --rm --network host -e AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" -e AWS_SECR
 | S3 endpoint | `http://localhost:8333`, region `us-east-1`(임의), path-style 접근, 버킷 `${S3_BUCKET_MEDIA}` |
 | JWT 서명 키 | `JWT_ACTIVE_KID`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY` (`gen-jwt-key.sh`가 생성. 다시 만들면 기존 토큰이 모두 무효) |
 
+## 관측 (S21-2, 선택)
+
+```bash
+# Prometheus(http://localhost:9090)·Alertmanager(http://localhost:9093). 기본 up 에는 포함되지 않는다
+docker compose -f infra/docker-compose.yml --env-file infra/.env --profile monitoring up -d
+```
+
+- API 메트릭은 관리 포트 `http://localhost:8091/actuator/prometheus` (앱 포트 8080 에는 `/livez`·`/readyz` 만). 운영에서는 관리 포트를 외부에 열지 않는다
+- 알림 규칙: `prometheus/alerts.yml` (API 다운, 5xx 급증, 로그인 실패 급증, Refresh 재사용, AI 비용 80%·상한, DLQ, 배치 실패, 푸시 포기, 워커 다운). 규칙 테스트 `prometheus/alerts_test.yml`
+- 확인: `docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus:ro" -w /etc/prometheus --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts_test.yml`
+- 알림을 받을 곳(이메일·Discord 등)은 S22 에서 `alertmanager/alertmanager.yml` 에 넣는다. 지금은 웹 화면에서만 본다
+- 서버 두 개를 같이 띄울 때(예: 8080·8081)는 관리 포트가 겹치지 않게 `--management.server.port=8092` 를 준다
+
 ## 알아둘 점
 
 - **Presigned URL과 호스트:** 서명에 호스트가 포함된다. 서버가 `localhost:8333`으로 서명한 URL은

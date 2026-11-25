@@ -1,0 +1,72 @@
+# 알림 규칙 (사양서 9.8: 로그인 실패 급증·Refresh 재사용·5xx 급증, 7.2 비용, 12장 관측).
+# 메트릭: HTTP 는 Spring 기본(http_server_requests), 나머지는 FamlogMetrics·OpsMetrics. 규칙 테스트: alerts_test.yml
+groups:
+  - name: famlog
+    rules:
+      - alert: ApiDown
+        expr: up{job="famlog-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "API 서버가 2분째 응답하지 않아요"
+
+      - alert: Http5xxSpike
+        expr: |
+          sum(increase(http_server_requests_seconds_count{job="famlog-api", status=~"5.."}[5m])) >= 5
+          and
+          sum(rate(http_server_requests_seconds_count{job="famlog-api", status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{job="famlog-api"}[5m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "5분 동안 5xx 가 5% 넘게 났어요"
+
+      - alert: LoginFailureSpike
+        expr: |
+          sum(increase(http_server_requests_seconds_count{job="famlog-api", uri=~"/api/v1/auth/.*", status=~"401|429"}[10m])) > 30
+        labels: {severity: warning}
+        annotations:
+          summary: "10분 동안 로그인·재발급 실패(401·429)가 30번 넘었어요"
+
+      - alert: RefreshTokenReuse
+        expr: increase(famlog_auth_refresh_reuse_total[10m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Refresh 토큰 재사용(탈취 의심)을 감지해 그 사용자의 전 세션을 폐기했어요"
+
+      - alert: AiCostWarning
+        expr: famlog_ai_cost_month_usd >= 0.8 * famlog_ai_budget_usd and famlog_ai_cost_month_usd < famlog_ai_budget_usd
+        labels: {severity: warning}
+        annotations:
+          summary: "이번 달 AI 비용이 상한의 80%를 넘었어요"
+
+      - alert: AiBudgetReached
+        expr: famlog_ai_cost_month_usd >= famlog_ai_budget_usd
+        labels: {severity: critical}
+        annotations:
+          summary: "이번 달 AI 비용 상한에 닿아 새 분석을 멈췄어요"
+
+      - alert: DeadLetters
+        expr: max by (stream) (delta(famlog_stream_dlq_length[1h])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "DLQ({{ $labels.stream }})에 새 항목이 쌓였어요"
+
+      - alert: BatchFailed
+        expr: sum by (job) (increase(famlog_batch_failures_total[1h])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "배치({{ $labels.job }})가 실패했어요"
+
+      - alert: PushGivingUp
+        expr: sum(increase(famlog_push_failures_total{reason="gave_up"}[30m])) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: "30분 동안 다시 보내도 실패한 푸시가 10건 넘어요"
+
+      - alert: WorkerDown
+        expr: famlog_worker_alive == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations:
+          summary: "살아 있는 워커가 없어요 (사진 처리·AI 분석이 멈춰요)"

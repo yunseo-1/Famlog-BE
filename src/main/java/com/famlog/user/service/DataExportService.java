@@ -26,6 +26,7 @@ import com.famlog.common.audit.AuditAction;
 import com.famlog.common.audit.AuditLogger;
 import com.famlog.common.error.BusinessException;
 import com.famlog.common.error.ErrorCode;
+import com.famlog.common.metrics.FamlogMetrics;
 import com.famlog.common.time.FamlogTime;
 import com.famlog.media.storage.MediaStorage;
 import com.famlog.user.domain.DataExportRequest;
@@ -69,6 +70,7 @@ public class DataExportService {
     private final TransactionTemplate transactionTemplate;
     private final DataExportProperties properties;
     private final JsonMapper jsonMapper;
+    private final FamlogMetrics metrics;
     private final Clock clock;
 
     /** 상태와 (READY 일 때만) 다운로드 링크 */
@@ -172,6 +174,7 @@ public class DataExportService {
             log.info("내보내기 준비: exportId={}, size={}", exportId, size);
         } catch (IOException | RuntimeException e) {
             log.warn("내보내기 실패: exportId={}, error={}", exportId, e.getClass().getSimpleName());
+            metrics.batchFailure("data-export");
             transactionTemplate.executeWithoutResult(status -> {
                 DataExportRequest current = repository.findById(exportId).orElseThrow();
                 current.failed(properties.maxAttempts(), Instant.now(clock));

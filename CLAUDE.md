@@ -88,7 +88,7 @@ docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build -
 # 서버 (JDK 21, 테스트는 Docker 필요: Testcontainers가 infra/postgres 이미지를 빌드)
 ./gradlew test
 ./gradlew bootRun          # 기본 프로필 local: infra/.env 를 읽어 로컬 인프라에 접속
-# 확인: http://localhost:8080/actuator/health, http://localhost:8080/v3/api-docs
+# 확인: http://localhost:8080/readyz, http://localhost:8080/v3/api-docs (관리 포트: http://localhost:8091/actuator/health·/actuator/prometheus)
 # 워커 테스트 (Docker로 Python 3.12 + FFmpeg 이미지에서 실행)
 docker build --target test -t famlog-worker-test worker && docker run --rm famlog-worker-test
 # API 계약: API를 바꿨으면 다시 만들어 함께 커밋 (안 하면 CI 실패). 머지 후 문서 레포로 복사

@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.famlog.common.metrics.FamlogMetrics;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class RetentionCleanupTicker {
 
+    private final FamlogMetrics metrics;
     private final RetentionCleanupService cleanupService;
 
     @Scheduled(cron = "0 45 4 * * *", zone = "Asia/Seoul")
@@ -26,6 +29,7 @@ class RetentionCleanupTicker {
             Map<String, Integer> counts = cleanupService.clean();
             log.info("보관 기간 정리: {}", counts);
         } catch (RuntimeException e) {
+            metrics.batchFailure("retention");
             log.warn("보관 기간 정리 실패: error={}", e.getClass().getSimpleName());
         }
     }

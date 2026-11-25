@@ -24,3 +24,7 @@ famlog:
     reminder-enabled: false
   ai:
     ticker-enabled: false
+management:
+  server:
+    port: 0   # 관리 포트도 무작위 (테스트는 @LocalManagementPort 로 부른다)
+

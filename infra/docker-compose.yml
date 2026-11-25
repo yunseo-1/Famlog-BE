@@ -98,7 +98,33 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # 관측 (사양서 12장, S21-2): 기본으로는 뜨지 않는다. 켜기: docker compose ... --profile monitoring up -d
+  # Prometheus http://localhost:9090 (알림 규칙 infra/prometheus/alerts.yml), Alertmanager http://localhost:9093
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 호스트에서 도는 API(관리 포트 8091)를 긁는다
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: [monitoring]
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:
   seaweedfs-data:
+  prometheus-data:

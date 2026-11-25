@@ -195,7 +195,8 @@
 | S20-4 | ACC-02 내 데이터 내보내기(ZIP·7일 링크·준비 알림) | ✅ PR #29 |
 | S20-5-1 | 삭제 예정 그룹 파기, 미디어 파일 정리, 보관 기간 정리 배치, 에러 코드 `MEDIA_UNAVAILABLE` | ✅ PR #30 |
 | S20-5-2 | 서버·워커 PEL 회수, 푸시 재시도, 멈춘 AI 요청 정리, 관리자 운영 배너 | ✅ PR #31 |
-| S21-1 | 보안 테스트 SEC-T1(엔드포인트 목록에서 자동 생성)·T2·T9(카나리·로그 검사 CI) | ✅ 이번 PR |
+| S21-1 | 보안 테스트 SEC-T1(엔드포인트 목록에서 자동 생성)·T2·T9(카나리·로그 검사 CI) | ✅ PR #33 |
+| S21-2 | Prometheus 메트릭(관리 포트 8091)·운영 게이지·사건 카운터, 알림 규칙 10개, monitoring 프로필 | ✅ 이번 PR |
 | S20~S22 | (다음) 설정·개인정보·신고, 보안 테스트, 출시 준비 | 다음 (S20) |
 | S20~S22 | 설정·개인정보, 보안 테스트, 출시 준비 | |
 
@@ -516,6 +517,13 @@
 | SEC-T8 | 평가셋 인젝션 케이스(e47·e48) `./gradlew evalReplay`(기록 재계산, 무료): 일치 100%·오탐 0%. `ExtractResultHandlerTest`(스키마 밖 출력 거부) | ✅ |
 | SEC-T9 | `LogCanaryTest`(카나리를 로그인·채팅·푸시·AI 요청·내보내기로, DEBUG에서도 로그에 없음) + `scripts/scan-logs.sh`(서버·워커 테스트 로그의 토큰·좌표·출생연도월 패턴, CI) | ✅ |
 | SEC-T10 | 릴리스 APK 비밀 키 검색·앱 백업 제외는 앱(S22) | 앱 |
+
+### 관측 (S21-2, 사양서 12장·9.8)
+
+- **관리 포트 8091** (`MANAGEMENT_PORT`): `/actuator/health`·`/actuator/prometheus`. 앱 포트 8080 에는 `/livez`·`/readyz`만(Actuator 없음). 운영에서 관리 포트는 내부망만
+- **메트릭** (`application=famlog-api` 태그): HTTP 기본(`http_server_requests`, 5xx·로그인 401/429), `famlog_auth_refresh_reuse_total`, `famlog_batch_failures_total{job}`(파기·정리·내보내기·회수·AI·리마인드), `famlog_push_failures_total{reason}`(invalid_token·rejected·gave_up), 게이지 `famlog_ai_cost_month_usd`·`famlog_ai_budget_usd`·`famlog_ai_jobs_queued`·`famlog_stream_dlq_length{stream}`·`famlog_worker_alive`(워커가 30초마다 `famlog:worker:alive:{consumer}` 90초 키). 태그에 사용자·그룹 id 없음
+- **알림 규칙** `infra/prometheus/alerts.yml`: ApiDown, Http5xxSpike, LoginFailureSpike, RefreshTokenReuse, AiCostWarning(80%), AiBudgetReached, DeadLetters, BatchFailed, PushGivingUp, WorkerDown. 규칙 테스트 `alerts_test.yml`, CI `monitoring-config` 잡(promtool·amtool)
+- **실행**: `docker compose ... --profile monitoring up -d` → Prometheus :9090, Alertmanager :9093. 받을 곳(이메일·Discord)은 S22
 
 ### 다음 단계로 넘긴 것
 

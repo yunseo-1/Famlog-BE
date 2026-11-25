@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.famlog.common.cleanup.CleanupProperties;
+import com.famlog.common.metrics.FamlogMetrics;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class MediaCleanupTicker {
 
+    private final FamlogMetrics metrics;
     private final MediaCleanupService cleanupService;
     private final CleanupProperties properties;
     private final Clock clock;
@@ -35,6 +37,7 @@ class MediaCleanupTicker {
                 log.info("미디어 정리: unattached={}, deletedMessages={}", unattached, deleted);
             }
         } catch (RuntimeException e) {
+            metrics.batchFailure("media-cleanup");
             log.warn("미디어 정리 실패: error={}", e.getClass().getSimpleName());
         }
     }

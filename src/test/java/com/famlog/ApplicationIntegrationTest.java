@@ -10,8 +10,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestClient;
 
 import com.famlog.common.web.TraceIdFilter;
 import com.famlog.support.IntegrationTest;
@@ -22,12 +25,38 @@ class ApplicationIntegrationTest extends IntegrationTest {
 
     private static final Logger log = LoggerFactory.getLogger(ApplicationIntegrationTest.class);
 
+    @LocalManagementPort
+    int managementPort;
+
     @Test
-    void health는_공개되고_상세_정보는_숨긴다() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.components").doesNotExist());
+    void health는_관리_포트에서_공개되고_상세_정보는_숨긴다() {
+        ResponseEntity<String> health = management().get().uri("/actuator/health").retrieve().toEntity(String.class);
+        assertThat(health.getStatusCode().value()).isEqualTo(200);
+        assertThat(health.getBody()).contains("\"status\":\"UP\"").doesNotContain("components");
+    }
+
+    @Test
+    void 앱_포트에는_상태_확인_경로만_있고_Actuator는_없다() throws Exception {
+        mockMvc.perform(get("/livez")).andExpect(status().isOk());
+        mockMvc.perform(get("/readyz")).andExpect(status().isOk());
+        RestClient app = RestClient.create("http://localhost:" + port);
+        for (String path : new String[] { "/actuator/health", "/actuator/prometheus" }) {
+            int status = app.get().uri(path).exchange((request, response) -> response.getStatusCode().value());
+            assertThat(status).as(path).isEqualTo(404);
+        }
+    }
+
+    @Test
+    void Prometheus_메트릭은_관리_포트에서_나오고_운영_지표가_들어_있다() {
+        String metrics = management().get().uri("/actuator/prometheus").retrieve().body(String.class);
+        assertThat(metrics).contains("http_server_requests_seconds", "famlog_auth_refresh_reuse_total",
+                "famlog_batch_failures_total{", "famlog_push_failures_total{", "famlog_ai_cost_month_usd",
+                "famlog_ai_budget_usd", "famlog_ai_jobs_queued", "famlog_stream_dlq_length{", "famlog_worker_alive",
+                "application=\"famlog-api\"");
+    }
+
+    private RestClient management() {
+        return RestClient.create("http://localhost:" + managementPort);
     }
 
     @Test
